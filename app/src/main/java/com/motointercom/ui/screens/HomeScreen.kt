@@ -157,9 +157,9 @@ fun HomeScreen(
             val context = LocalContext.current
             val currentVersion = remember {
                 try {
-                    context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0.0"
+                    context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.1.0"
                 } catch (_: Exception) {
-                    "1.0.0"
+                    "1.1.0"
                 }
             }
 
