@@ -32,12 +32,21 @@ import com.motointercom.domain.model.SessionState
 import com.motointercom.ui.theme.*
 
 import com.motointercom.data.wifi.DiscoveredSession
+import androidx.compose.ui.platform.LocalContext
+import com.motointercom.data.updater.ApkDownloader
+import com.motointercom.data.updater.UpdateInfo
 
 @Composable
 fun HomeScreen(
     session: Session,
     errorMessage: String?,
     discoveredSessions: List<DiscoveredSession> = emptyList(),
+    updateInfo: UpdateInfo? = null,
+    isCheckingUpdate: Boolean = false,
+    updateStatusMessage: String? = null,
+    onCheckForUpdates: () -> Unit = {},
+    onDismissUpdate: () -> Unit = {},
+    onClearUpdateStatusMessage: () -> Unit = {},
     onCreateSession: (name: String) -> Unit,
     onJoinSession: (name: String, ip: String) -> Unit,
     onClearError: () -> Unit,
@@ -142,7 +151,35 @@ fun HomeScreen(
             // ── Info Footer ─────────────────────────────────────────────
             InfoCard()
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(14.dp))
+
+            // ── App Version & Updates ───────────────────────────────────
+            val context = LocalContext.current
+            val currentVersion = remember {
+                try {
+                    context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0.0"
+                } catch (_: Exception) {
+                    "1.0.0"
+                }
+            }
+
+            AppUpdateCard(
+                currentVersion = currentVersion,
+                isChecking = isCheckingUpdate,
+                statusMessage = updateStatusMessage,
+                onCheckForUpdates = onCheckForUpdates,
+                onClearStatusMessage = onClearUpdateStatusMessage
+            )
+
+            Spacer(Modifier.height(24.dp))
+        }
+
+        // ── Update Available Dialog ──────────────────────────────────────
+        if (updateInfo != null && updateInfo.isUpdateAvailable) {
+            UpdateAvailableDialog(
+                updateInfo = updateInfo,
+                onDismiss = onDismissUpdate
+            )
         }
 
         // ── Error Snackbar ──────────────────────────────────────────────
@@ -590,4 +627,181 @@ private fun InfoCard() {
             color = TextSecondary
         )
     }
+}
+
+@Composable
+private fun AppUpdateCard(
+    currentVersion: String,
+    isChecking: Boolean,
+    statusMessage: String?,
+    onCheckForUpdates: () -> Unit,
+    onClearStatusMessage: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(BackgroundCard)
+            .border(1.dp, DividerColor, RoundedCornerShape(12.dp))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    "VERSION DE LA APP",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextMuted,
+                    letterSpacing = 1.sp
+                )
+                Text(
+                    "v$currentVersion",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+            }
+
+            if (isChecking) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(22.dp),
+                    color = OrangeFlame,
+                    strokeWidth = 2.dp
+                )
+            } else {
+                OutlinedButton(
+                    onClick = onCheckForUpdates,
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, OrangeFlame.copy(alpha = 0.5f)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = OrangeFlame),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        "BUSCAR ACTUALIZACIONES",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+
+        statusMessage?.let { msg ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(BackgroundElevated)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    msg,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(
+                    onClick = onClearStatusMessage,
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text("CERRAR", style = MaterialTheme.typography.labelSmall, color = OrangeFlame)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun UpdateAvailableDialog(
+    updateInfo: UpdateInfo,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                "ACTUALIZACION DISPONIBLE",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = OrangeFlame
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    "Nueva version: v${updateInfo.latestVersion}",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextPrimary
+                )
+                Text(
+                    "Version instalada: v${updateInfo.currentVersion}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary
+                )
+                if (updateInfo.apkSize > 0) {
+                    val sizeMb = updateInfo.apkSize / (1024f * 1024f)
+                    Text(
+                        "Tamaño del APK: ${String.format(java.util.Locale.US, "%.1f", sizeMb)} MB",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextMuted
+                    )
+                }
+                if (updateInfo.releaseNotes.isNotBlank()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Novedades:",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = AmberGlow,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 140.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(BackgroundCard)
+                            .border(1.dp, DividerColor, RoundedCornerShape(8.dp))
+                            .padding(8.dp)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        Text(
+                            updateInfo.releaseNotes,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val url = updateInfo.apkUrl ?: updateInfo.releaseUrl
+                    ApkDownloader.downloadApk(context, url, updateInfo.latestVersion)
+                    onDismiss()
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = OrangeFlame),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("DESCARGAR APK", fontWeight = FontWeight.Bold, color = Color.Black)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("MAS TARDE", color = TextSecondary)
+            }
+        },
+        containerColor = BackgroundElevated,
+        shape = RoundedCornerShape(16.dp)
+    )
 }

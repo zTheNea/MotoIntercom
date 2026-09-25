@@ -13,10 +13,13 @@ import com.motointercom.domain.model.SessionRole
 import com.motointercom.domain.model.SessionState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import com.motointercom.data.updater.UpdateChecker
+import com.motointercom.data.updater.UpdateInfo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
@@ -40,6 +43,17 @@ class HomeViewModel @Inject constructor(
 
     private var hotspotManager: HotspotManager? = null
 
+    private val updateChecker = UpdateChecker(application)
+
+    private val _updateInfo = MutableStateFlow<UpdateInfo?>(null)
+    val updateInfo: StateFlow<UpdateInfo?> = _updateInfo.asStateFlow()
+
+    private val _isCheckingUpdate = MutableStateFlow(false)
+    val isCheckingUpdate: StateFlow<Boolean> = _isCheckingUpdate.asStateFlow()
+
+    private val _updateStatusMessage = MutableStateFlow<String?>(null)
+    val updateStatusMessage: StateFlow<String?> = _updateStatusMessage.asStateFlow()
+
     init {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             hotspotManager = HotspotManager(application)
@@ -47,6 +61,7 @@ class HomeViewModel @Inject constructor(
         // Start listening for available sessions over WiFi
         discovery.startListening()
         refreshLocalIp()
+        checkForUpdates(isManual = false)
     }
 
     fun refreshLocalIp() {
@@ -116,6 +131,38 @@ class HomeViewModel @Inject constructor(
     fun clearError() { _errorMessage.value = null }
 
     fun setErrorMessage(msg: String) { _errorMessage.value = msg }
+
+    fun checkForUpdates(isManual: Boolean = false) {
+        viewModelScope.launch {
+            if (isManual) {
+                _isCheckingUpdate.value = true
+                _updateStatusMessage.value = null
+            }
+            val result = updateChecker.checkForUpdates()
+            result.onSuccess { info ->
+                if (info.isUpdateAvailable) {
+                    _updateInfo.value = info
+                } else if (isManual) {
+                    _updateStatusMessage.value = "Tienes la version mas reciente instalada (v${info.currentVersion})."
+                }
+            }.onFailure {
+                if (isManual) {
+                    _updateStatusMessage.value = "No fue posible verificar actualizaciones en este momento."
+                }
+            }
+            if (isManual) {
+                _isCheckingUpdate.value = false
+            }
+        }
+    }
+
+    fun dismissUpdate() {
+        _updateInfo.value = null
+    }
+
+    fun clearUpdateStatusMessage() {
+        _updateStatusMessage.value = null
+    }
 
     override fun onCleared() {
         discovery.stopListening()
