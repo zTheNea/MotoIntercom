@@ -54,11 +54,12 @@ class UdpAudioTransport(
     private var cachedHostIp: String = ""
     val localId: String = PacketCodec.buildLocalId()
     private var sequence: Int = 0
+    private var musicSequence: Int = 0
 
     // ── Callbacks ────────────────────────────────────────────────────────
 
     var onAudioReceived: ((senderId: String, pcm: ByteArray, amplitude: Float) -> Unit)? = null
-    var onMusicFrameReceived: ((senderId: String, pcm: ByteArray, sampleRate: Int) -> Unit)? = null
+    var onMusicFrameReceived: ((senderId: String, pcm: ByteArray, sampleRate: Int, sequence: Int) -> Unit)? = null
     var onMusicCtrlReceived: ((senderId: String, action: Byte, trackTitle: String) -> Unit)? = null
     var onRosterUpdated: ((riders: List<Rider>) -> Unit)? = null
     var onClientJoined: ((clientId: String, name: String) -> Unit)? = null
@@ -175,9 +176,14 @@ class UdpAudioTransport(
     }
 
     fun sendMusicFrame(pcm: ByteArray, sampleRate: Int = 16000) {
+        val seq = synchronized(this) {
+            val s = musicSequence
+            musicSequence = (musicSequence + 1) and 0xFFFF
+            s
+        }
         scope.launch(Dispatchers.IO) {
             val packet = PacketCodec.buildMusicFramePacket(
-                sequence = sequence++,
+                sequence = seq,
                 sessionToken = sessionToken,
                 localId = localId,
                 pcm = pcm,
@@ -419,12 +425,12 @@ class UdpAudioTransport(
                             currentMusicSenderId = senderId
                             currentMusicSenderLastSeen = now
                             relayToOthers(senderId, data, packet.length)
-                            onMusicFrameReceived?.invoke(parsed.senderId, parsed.pcm, parsed.sampleRate)
+                            onMusicFrameReceived?.invoke(parsed.senderId, parsed.pcm, parsed.sampleRate, parsed.sequence)
                         } else {
                             // Ignored: another rider is already sharing music exclusively
                         }
                     } else {
-                        onMusicFrameReceived?.invoke(parsed.senderId, parsed.pcm, parsed.sampleRate)
+                        onMusicFrameReceived?.invoke(parsed.senderId, parsed.pcm, parsed.sampleRate, parsed.sequence)
                     }
                 }
             }

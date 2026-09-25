@@ -220,24 +220,34 @@ class SystemAudioCapture(
                         // Downmix to mono if captured in stereo
                         if (capturedStereo) {
                             for (i in 0 until samplesPer20ms) {
-                                val left = rawBuffer[i * 2].toInt()
-                                val right = rawBuffer[i * 2 + 1].toInt()
-                                monoInput[i] = ((left + right) / 2).coerceIn(-32768, 32767).toShort()
+                                val left = rawBuffer[i * 2].toDouble()
+                                val right = rawBuffer[i * 2 + 1].toDouble()
+                                monoInput[i] = ((left + right) * 0.5).toInt().coerceIn(-32768, 32767).toShort()
                             }
                         } else {
                             System.arraycopy(rawBuffer, 0, monoInput, 0, samplesPer20ms)
                         }
 
-                        // Linear resampling to 16kHz 320 samples
-                        val step = samplesPer20ms.toDouble() / TARGET_FRAME_SAMPLES.toDouble()
-                        for (i in 0 until TARGET_FRAME_SAMPLES) {
-                            val srcPos = i * step
-                            val srcIdx = srcPos.toInt()
-                            val frac = srcPos - srcIdx
-                            val s1 = monoInput[srcIdx.coerceAtMost(samplesPer20ms - 1)].toDouble()
-                            val s2 = monoInput[(srcIdx + 1).coerceAtMost(samplesPer20ms - 1)].toDouble()
-                            val interpolated = (s1 + frac * (s2 - s1)).toInt()
-                            outFrame[i] = interpolated.coerceIn(-32768, 32767).toShort()
+                        // Resampling to 16kHz 320 samples with anti-aliasing
+                        if (capturedRate == 48000) {
+                            // 3:1 integer decimation with 3-tap box anti-aliasing filter
+                            for (i in 0 until TARGET_FRAME_SAMPLES) {
+                                val s0 = monoInput[i * 3].toInt()
+                                val s1 = monoInput[i * 3 + 1].toInt()
+                                val s2 = monoInput[i * 3 + 2].toInt()
+                                outFrame[i] = ((s0 + s1 + s2) / 3).coerceIn(-32768, 32767).toShort()
+                            }
+                        } else {
+                            val step = samplesPer20ms.toDouble() / TARGET_FRAME_SAMPLES.toDouble()
+                            for (i in 0 until TARGET_FRAME_SAMPLES) {
+                                val srcPos = i * step
+                                val srcIdx = srcPos.toInt()
+                                val frac = srcPos - srcIdx
+                                val s1 = monoInput[srcIdx.coerceAtMost(samplesPer20ms - 1)].toDouble()
+                                val s2 = monoInput[(srcIdx + 1).coerceAtMost(samplesPer20ms - 1)].toDouble()
+                                val interpolated = (s1 + frac * (s2 - s1)).toInt()
+                                outFrame[i] = interpolated.coerceIn(-32768, 32767).toShort()
+                            }
                         }
 
                         onFrameAvailable(outFrame.copyOf())

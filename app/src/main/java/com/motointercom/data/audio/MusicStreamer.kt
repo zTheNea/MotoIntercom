@@ -42,7 +42,7 @@ class MusicStreamer(
     fun playDemo() {
         stop()
         demoGenerator.reset()
-        _currentTrack.value = "⚡ MotoBeat Highway (Demo)"
+        _currentTrack.value = "MotoBeat Highway (Demo)"
         _isPlaying.value = true
         _isPaused.value = false
         onControlChanged?.invoke(1 /* PLAY */, _currentTrack.value ?: "MotoBeat")

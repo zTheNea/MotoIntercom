@@ -33,6 +33,8 @@ class AudioFileDecoder(
     private var sourceChannels = 2
 
     private val pcmResidualBuffer = ByteArrayOutputStream()
+    private var resamplePhase = 0.0
+    private val resampleInputBuffer = ArrayDeque<Short>()
 
     fun initialize(): Boolean {
         return try {
@@ -155,60 +157,66 @@ class AudioFileDecoder(
         codec = null
         extractor = null
         pcmResidualBuffer.reset()
+        resampleInputBuffer.clear()
+        resamplePhase = 0.0
     }
 
     /**
-     * Converts raw 16-bit PCM from [srcRate] and [srcChannels] to 16,000 Hz mono.
+     * Converts raw 16-bit PCM from [srcRate] and [srcChannels] to 16,000 Hz mono
+     * using a continuous fractional-phase streaming resampler.
      */
     private fun resampleTo16kMono(input: ByteArray, srcRate: Int, srcChannels: Int): ByteArray {
         val totalSrcSamples = input.size / 2
         val framesCount = totalSrcSamples / srcChannels
         if (framesCount <= 0) return ByteArray(0)
 
-        // 1. Downmix to mono shorts
-        val monoShorts = ShortArray(framesCount)
+        // 1. Downmix to mono shorts and enqueue
         var byteIdx = 0
         for (i in 0 until framesCount) {
             var sum = 0
             for (ch in 0 until srcChannels) {
                 if (byteIdx + 1 < input.size) {
-                    val sample = ((input[byteIdx].toInt() and 0xFF) or (input[byteIdx + 1].toInt() shl 8)).toShort()
+                    val low = input[byteIdx].toInt() and 0xFF
+                    val high = input[byteIdx + 1].toInt() and 0xFF
+                    val sample = ((high shl 8) or low).toShort()
                     sum += sample.toInt()
                     byteIdx += 2
                 }
             }
-            monoShorts[i] = (sum / srcChannels).toShort()
+            resampleInputBuffer.add((sum / srcChannels).toShort())
         }
 
-        // 2. Resample to 16,000 Hz via linear interpolation
+        // If source matches target exactly, drain directly
         if (srcRate == TARGET_SAMPLE_RATE) {
-            val out = ByteArray(framesCount * 2)
-            for (i in 0 until framesCount) {
-                val s = monoShorts[i].toInt()
-                out[i * 2] = (s and 0xFF).toByte()
-                out[i * 2 + 1] = ((s shr 8) and 0xFF).toByte()
+            val out = ByteArray(resampleInputBuffer.size * 2)
+            var oIdx = 0
+            while (resampleInputBuffer.isNotEmpty()) {
+                val s = resampleInputBuffer.removeFirst().toInt()
+                out[oIdx++] = (s and 0xFF).toByte()
+                out[oIdx++] = ((s shr 8) and 0xFF).toByte()
             }
             return out
         }
 
         val ratio = srcRate.toDouble() / TARGET_SAMPLE_RATE.toDouble()
-        val targetFrames = (framesCount / ratio).roundToInt().coerceAtLeast(1)
-        val out = ByteArray(targetFrames * 2)
+        val outStream = ByteArrayOutputStream()
 
-        for (i in 0 until targetFrames) {
-            val srcPos = i * ratio
-            val index0 = srcPos.toInt().coerceIn(0, framesCount - 1)
-            val index1 = (index0 + 1).coerceIn(0, framesCount - 1)
-            val frac = srcPos - index0
+        // Continuous streaming linear interpolation across chunks
+        while (resampleInputBuffer.size >= 2) {
+            val s0 = resampleInputBuffer[0].toDouble()
+            val s1 = resampleInputBuffer[1].toDouble()
+            val interpolated = (s0 + resamplePhase * (s1 - s0)).roundToInt().coerceIn(-32768, 32767)
 
-            val sample0 = monoShorts[index0].toDouble()
-            val sample1 = monoShorts[index1].toDouble()
-            val interpolated = (sample0 + (sample1 - sample0) * frac).roundToInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+            outStream.write(interpolated and 0xFF)
+            outStream.write((interpolated shr 8) and 0xFF)
 
-            out[i * 2] = (interpolated and 0xFF).toByte()
-            out[i * 2 + 1] = ((interpolated shr 8) and 0xFF).toByte()
+            resamplePhase += ratio
+            while (resamplePhase >= 1.0 && resampleInputBuffer.size >= 2) {
+                resamplePhase -= 1.0
+                resampleInputBuffer.removeFirst()
+            }
         }
 
-        return out
+        return outStream.toByteArray()
     }
 }

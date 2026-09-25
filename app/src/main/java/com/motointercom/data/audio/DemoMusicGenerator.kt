@@ -4,10 +4,10 @@ import kotlin.math.PI
 import kotlin.math.sin
 
 /**
- * Built-in audio synthesizer generating an upbeat rhythmic motorcycle highway rock/synth theme.
+ * Built-in audio synthesizer generating an upbeat rhythmic highway rock/synth theme.
  *
- * Provides a ready-to-test 16 kHz 16-bit PCM stream without requiring the user to have
- * audio/MP3 files stored on their device.
+ * Provides a ready-to-test 16 kHz 16-bit PCM stream with clean headroom
+ * and zero harmonic clipping.
  */
 class DemoMusicGenerator {
 
@@ -38,37 +38,37 @@ class DemoMusicGenerator {
 
             // 120 BPM = 2 beats per second (beat period = 0.5s)
             val beatTime = t % 0.5
-            val barTime = t % 4.0 // 4 beat bar (2 seconds)
             val chordIndex = ((t / 1.0).toInt()) % bassNotes.size
 
-            // 1. Kick Drum (low frequency sine sweeping down + fast decay)
+            // 1. Kick Drum (sine sweep with smooth quadratic decay)
             val kick = if (beatTime < 0.15) {
-                val kickFreq = 120.0 * (1.0 - beatTime / 0.15) + 45.0
-                sin(TWO_PI * kickFreq * beatTime) * (1.0 - beatTime / 0.15) * 0.45
+                val decay = 1.0 - beatTime / 0.15
+                val kickFreq = 110.0 * decay + 45.0
+                sin(TWO_PI * kickFreq * beatTime) * decay * decay * 0.28
             } else 0.0
 
-            // 2. Snare / Hi-Hat on off-beats
+            // 2. Hi-Hat on off-beats with smooth decay
             val hihatTime = (t + 0.25) % 0.5
-            val hihat = if (hihatTime < 0.04) {
-                // High frequency metallic click
-                sin(TWO_PI * 3400.0 * hihatTime) * (1.0 - hihatTime / 0.04) * 0.15
+            val hihat = if (hihatTime < 0.035) {
+                val decay = 1.0 - hihatTime / 0.035
+                sin(TWO_PI * 3200.0 * hihatTime) * decay * decay * 0.08
             } else 0.0
 
-            // 3. Bass synth
+            // 3. Bass synth (clean fundamental + mild 2nd harmonic)
             val bassFreq = bassNotes[chordIndex]
-            val bass = sin(TWO_PI * bassFreq * t) * 0.30 +
-                       sin(TWO_PI * bassFreq * 2.0 * t) * 0.15
+            val bass = sin(TWO_PI * bassFreq * t) * 0.20 +
+                       sin(TWO_PI * bassFreq * 2.0 * t) * 0.06
 
-            // 4. Arpeggiator lead (changes every 0.125s)
+            // 4. Arpeggiator lead (changes every 0.125s) with smooth decay
             val arpIndex = ((t / 0.125).toInt()) % arpeggio.size
             val arpFreq = arpeggio[arpIndex]
             val arpTime = t % 0.125
             val arpDecay = (1.0 - arpTime / 0.125).coerceAtLeast(0.0)
-            val lead = (sin(TWO_PI * arpFreq * t) + 0.5 * sin(TWO_PI * arpFreq * 2.0 * t)) * arpDecay * 0.22
+            val lead = (sin(TWO_PI * arpFreq * t) + 0.3 * sin(TWO_PI * arpFreq * 2.0 * t)) * arpDecay * 0.14
 
-            // Total mix (normalized to [-1.0, 1.0])
-            val total = (kick + hihat + bass + lead).coerceIn(-0.95, 0.95)
-            val sampleShort = (total * Short.MAX_VALUE).toInt().toShort()
+            // Total mix safely within headroom (peak ~0.65)
+            val total = (kick + hihat + bass + lead).coerceIn(-0.85, 0.85)
+            val sampleShort = (total * 28000.0).toInt().coerceIn(-32768, 32767).toShort()
 
             val byteOffset = i * 2
             out[byteOffset] = (sampleShort.toInt() and 0xFF).toByte()
