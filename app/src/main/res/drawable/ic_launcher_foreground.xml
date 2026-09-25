@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Motorcycle silhouette icon for MotoIntercom -->
+
+    <!-- Wheels -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M28,72 A12,12 0 1,0 28.01,72 Z" />
+    <path
+        android:fillColor="#FF6B00"
+        android:pathData="M28,65 A7,7 0 1,0 28.01,65 Z" />
+
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M80,72 A12,12 0 1,0 80.01,72 Z" />
+    <path
+        android:fillColor="#FF6B00"
+        android:pathData="M80,65 A7,7 0 1,0 80.01,65 Z" />
+
+    <!-- Frame body -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M38,64 L52,44 L68,44 L80,60 L72,64 L60,52 L48,64 Z" />
+
+    <!-- Fuel tank / seat -->
+    <path
+        android:fillColor="#FF6B00"
+        android:pathData="M50,44 Q54,36 64,36 Q70,36 72,44 Z" />
+
+    <!-- Handlebars -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:pathData="M66,40 L76,36 M66,40 L76,44" />
+
+    <!-- Rider silhouette (simplified) -->
+    <path
+        android:fillColor="#FFB800"
+        android:pathData="M56,44 Q54,38 58,34 Q62,30 66,34 Q68,38 64,42 Z" />
+
+    <!-- Headset arc (represents the intercom) -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#00E676"
+        android:strokeWidth="3"
+        android:pathData="M20,30 A34,34 0 0,1 88,30" />
+    <path
+        android:fillColor="#00E676"
+        android:pathData="M17,30 A5,5 0 1,0 17.01,30 Z" />
+    <path
+        android:fillColor="#00E676"
+        android:pathData="M91,30 A5,5 0 1,0 91.01,30 Z" />
+</vector>

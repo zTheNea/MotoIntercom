@@ -1,0 +1,70 @@
+<resources>
+    <string name="app_name">MotoIntercom</string>
+    <string name="app_tagline">Comunicación sin límites</string>
+
+    <!-- Home Screen -->
+    <string name="create_session">Crear Sesión</string>
+    <string name="create_session_desc">Ser el anfitrión del grupo (hasta 4 motos)</string>
+    <string name="join_session">Unirse a Sesión</string>
+    <string name="join_session_desc">Conectar a un grupo existente</string>
+    <string name="your_name">Tu nombre o alias</string>
+    <string name="host_ip_hint">IP del anfitrión (ej: 192.168.43.1)</string>
+    <string name="btn_create">CREAR GRUPO</string>
+    <string name="btn_join">UNIRSE</string>
+    <string name="btn_end_session">TERMINAR SESIÓN</string>
+
+    <!-- Session Screen -->
+    <string name="session_active">SESIÓN ACTIVA</string>
+    <string name="riders_count">Motociclistas</string>
+    <string name="wifi_credentials">Credenciales WiFi</string>
+    <string name="ssid_label">Red WiFi</string>
+    <string name="password_label">Contraseña</string>
+    <string name="host_ip_label">IP Anfitrión</string>
+    <string name="ptt_hold">MANTENER PARA HABLAR</string>
+    <string name="ptt_talking">HABLANDO…</string>
+    <string name="mute">Silenciar</string>
+    <string name="unmute">Activar Mic</string>
+    <string name="speaker">Altavoz</string>
+    <string name="headset">Casco BT</string>
+    <string name="vox_mode">Modo VOX</string>
+    <string name="you_label">Tú</string>
+    <string name="talking">Hablando</string>
+    <string name="connected">Conectado</string>
+    <string name="disconnected">Desconectado</string>
+    <string name="waiting">Esperando…</string>
+
+    <!-- Permissions -->
+    <string name="perm_audio_title">Permiso de Micrófono</string>
+    <string name="perm_audio_msg">MotoIntercom necesita acceso al micrófono para la comunicación de voz.</string>
+    <string name="perm_location_title">Permiso de Ubicación</string>
+    <string name="perm_location_msg">Requerido por Android para crear y detectar redes WiFi.</string>
+    <string name="perm_bt_title">Permiso de Bluetooth</string>
+    <string name="perm_bt_msg">Necesario para conectar tu casco Bluetooth.</string>
+    <string name="grant_permissions">Conceder Permisos</string>
+
+    <!-- Errors -->
+    <string name="error_hotspot_failed">No se pudo crear el punto de acceso WiFi. Verifica que el WiFi esté disponible.</string>
+    <string name="error_connection_failed">No se pudo conectar. Verifica la IP e intenta de nuevo.</string>
+    <string name="error_audio_failed">Error al inicializar el audio. Verifica el permiso de micrófono.</string>
+
+    <!-- Additional UI Strings -->
+    <string name="ptt_hold_to_talk">MANTÉN PARA HABLAR</string>
+    <string name="ptt_transmitting">🎙️ TRANSMITIENDO...</string>
+    <string name="vox_mode_active">MODO VOX ACTIVO</string>
+    <string name="vox_auto_transmission">Transmisión automática por voz</string>
+    <string name="reconnecting_warning">⚠️ RECONECTANDO CON LA SALA...</string>
+    <string name="rider_name_placeholder">Ej: Carlos, El Moto, Rider1…</string>
+    <string name="create_hotspot_title">Crear Punto de Acceso</string>
+    <string name="no_internet_required">🔴 Sin internet requerido</string>
+    <string name="range_info">📶 Hasta 300m de alcance</string>
+    <string name="max_riders_info">👥 Hasta 4 motociclistas</string>
+    <string name="end_session_title">Finalizar sesión</string>
+    <string name="end_session_message">¿Seguro que quieres salir del grupo? Se desconectarán todos los riders.</string>
+    <string name="dialog_exit">SALIR</string>
+    <string name="dialog_cancel">CANCELAR</string>
+
+    <!-- Notification -->
+    <string name="notif_channel_name">Intercomunicador</string>
+    <string name="notif_active_title">MotoIntercom Activo</string>
+    <string name="notif_active_text">Intercomunicador funcionando en segundo plano</string>
+</resources>

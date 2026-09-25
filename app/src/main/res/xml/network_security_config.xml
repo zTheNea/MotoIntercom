@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Network Security Config for MotoIntercom.
+
+    Blocks cleartext HTTP traffic globally.
+    Note: This does NOT affect raw UDP sockets (DatagramSocket) used
+    by the intercom audio transport — those operate outside the
+    HttpsURLConnection / OkHttp stack.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
