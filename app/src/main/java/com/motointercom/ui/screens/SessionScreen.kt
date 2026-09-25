@@ -478,9 +478,9 @@ private fun SessionHeader(
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     val statusText = when {
-                        isReconnecting -> "⚠️ RECONECTANDO..."
-                        role == SessionRole.HOST -> "👑 ANFITRIÓN"
-                        else -> "📡 CONECTADO"
+                        isReconnecting -> "RECONECTANDO..."
+                        role == SessionRole.HOST -> "ANFITRIÓN"
+                        else -> "CONECTADO"
                     }
                     val statusColor = when {
                         isReconnecting -> AmberGlow
@@ -1598,7 +1598,7 @@ private fun RainLockOverlay(
                     }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            "🌧️ MODO LLUVIA ACTIVO",
+                            "MODO LLUVIA ACTIVO",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Black,
                             color = Color.White,

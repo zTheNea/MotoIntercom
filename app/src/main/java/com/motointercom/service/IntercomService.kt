@@ -673,7 +673,7 @@ class IntercomService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("🏍️ MotoIntercom Activo")
+            .setContentTitle("MotoIntercom Activo")
             .setContentText("Intercomunicador funcionando en segundo plano")
             .setSmallIcon(android.R.drawable.ic_menu_call)
             .setContentIntent(pendingIntent)
