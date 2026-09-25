@@ -235,7 +235,7 @@ class IntercomService : Service() {
                 }
                 updateRiderTalking(senderId, amp)
             }
-            onMusicFrameReceived = { senderId, pcm, sampleRate ->
+            onMusicFrameReceived = { _, pcm, _ ->
                 musicPlayer.playFrame(pcm)
             }
             onMusicCtrlReceived = { senderId, action, trackTitle ->
