@@ -42,11 +42,7 @@ fun HomeScreen(
     errorMessage: String?,
     discoveredSessions: List<DiscoveredSession> = emptyList(),
     updateInfo: UpdateInfo? = null,
-    isCheckingUpdate: Boolean = false,
-    updateStatusMessage: String? = null,
-    onCheckForUpdates: () -> Unit = {},
     onDismissUpdate: () -> Unit = {},
-    onClearUpdateStatusMessage: () -> Unit = {},
     onCreateSession: (name: String) -> Unit,
     onJoinSession: (name: String, ip: String) -> Unit,
     onClearError: () -> Unit,
@@ -150,26 +146,6 @@ fun HomeScreen(
 
             // ── Info Footer ─────────────────────────────────────────────
             InfoCard()
-
-            Spacer(Modifier.height(14.dp))
-
-            // ── App Version & Updates ───────────────────────────────────
-            val context = LocalContext.current
-            val currentVersion = remember {
-                try {
-                    context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.1.0"
-                } catch (_: Exception) {
-                    "1.1.0"
-                }
-            }
-
-            AppUpdateCard(
-                currentVersion = currentVersion,
-                isChecking = isCheckingUpdate,
-                statusMessage = updateStatusMessage,
-                onCheckForUpdates = onCheckForUpdates,
-                onClearStatusMessage = onClearUpdateStatusMessage
-            )
 
             Spacer(Modifier.height(24.dp))
         }
@@ -626,93 +602,6 @@ private fun InfoCard() {
             style = MaterialTheme.typography.bodyMedium,
             color = TextSecondary
         )
-    }
-}
-
-@Composable
-private fun AppUpdateCard(
-    currentVersion: String,
-    isChecking: Boolean,
-    statusMessage: String?,
-    onCheckForUpdates: () -> Unit,
-    onClearStatusMessage: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(BackgroundCard)
-            .border(1.dp, DividerColor, RoundedCornerShape(12.dp))
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(
-                    "VERSION DE LA APP",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = TextMuted,
-                    letterSpacing = 1.sp
-                )
-                Text(
-                    "v$currentVersion",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary
-                )
-            }
-
-            if (isChecking) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(22.dp),
-                    color = OrangeFlame,
-                    strokeWidth = 2.dp
-                )
-            } else {
-                OutlinedButton(
-                    onClick = onCheckForUpdates,
-                    shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(1.dp, OrangeFlame.copy(alpha = 0.5f)),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = OrangeFlame),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        "BUSCAR ACTUALIZACIONES",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-        }
-
-        statusMessage?.let { msg ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(BackgroundElevated)
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    msg,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary,
-                    modifier = Modifier.weight(1f)
-                )
-                TextButton(
-                    onClick = onClearStatusMessage,
-                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
-                ) {
-                    Text("CERRAR", style = MaterialTheme.typography.labelSmall, color = OrangeFlame)
-                }
-            }
-        }
     }
 }
 

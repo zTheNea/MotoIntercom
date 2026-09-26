@@ -31,19 +31,13 @@ fun NavGraph(navController: NavHostController) {
             val error by homeVm.errorMessage.collectAsState()
             val discoveredSessions by homeVm.discoveredSessions.collectAsState()
             val updateInfo by homeVm.updateInfo.collectAsState()
-            val isCheckingUpdate by homeVm.isCheckingUpdate.collectAsState()
-            val updateStatusMessage by homeVm.updateStatusMessage.collectAsState()
 
             HomeScreen(
                 session = session,
                 errorMessage = error,
                 discoveredSessions = discoveredSessions,
                 updateInfo = updateInfo,
-                isCheckingUpdate = isCheckingUpdate,
-                updateStatusMessage = updateStatusMessage,
-                onCheckForUpdates = { homeVm.checkForUpdates(isManual = true) },
                 onDismissUpdate = { homeVm.dismissUpdate() },
-                onClearUpdateStatusMessage = { homeVm.clearUpdateStatusMessage() },
                 onCreateSession = { name -> homeVm.createSession(name) },
                 onJoinSession = { name, ip -> homeVm.joinSession(name, ip) },
                 onClearError = { homeVm.clearError() },
