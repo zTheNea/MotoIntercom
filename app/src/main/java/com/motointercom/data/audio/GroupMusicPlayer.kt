@@ -5,6 +5,9 @@ import android.media.AudioFormat
 import android.media.AudioTrack
 import android.util.Log
 import java.util.TreeMap
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 import kotlin.math.roundToInt
 
 /**
@@ -39,7 +42,8 @@ class GroupMusicPlayer {
     var isPlaying = false
         private set
 
-    private val lock = Any()
+    private val lock = ReentrantLock()
+    private val condition = lock.newCondition()
     private val frameMap = TreeMap<Int, ByteArray>()
     private var nextPlaySequence = -1
     private var localSequenceCounter = 0
@@ -89,7 +93,7 @@ class GroupMusicPlayer {
             audioTrack?.play()
             isPlaying = true
             currentFadeVolume = masterVolume
-            synchronized(lock) {
+            lock.withLock {
                 frameMap.clear()
                 nextPlaySequence = -1
                 localSequenceCounter = 0
@@ -102,7 +106,7 @@ class GroupMusicPlayer {
                     try {
                         var frameToWrite: ByteArray? = null
 
-                        synchronized(lock) {
+                        lock.withLock {
                             // 1. Initial pre-buffering (60ms cushion)
                             if (isBuffering) {
                                 if (frameMap.size >= PREBUFFER_TARGET_FRAMES) {
@@ -110,7 +114,7 @@ class GroupMusicPlayer {
                                     nextPlaySequence = frameMap.firstKey()
                                 } else {
                                     try {
-                                        (lock as java.lang.Object).wait(30)
+                                        condition.await(30, TimeUnit.MILLISECONDS)
                                     } catch (_: InterruptedException) {
                                         return@Thread
                                     }
@@ -126,7 +130,7 @@ class GroupMusicPlayer {
                                     if (frameMap.isEmpty()) {
                                         // Buffer starvation: wait briefly for incoming packets
                                         try {
-                                            (lock as java.lang.Object).wait(25)
+                                            condition.await(25, TimeUnit.MILLISECONDS)
                                         } catch (_: InterruptedException) {
                                             return@Thread
                                         }
@@ -138,7 +142,7 @@ class GroupMusicPlayer {
                                         // A packet was missed or delayed, but newer packets are available.
                                         // Wait up to 8ms in case of small network jitter
                                         try {
-                                            (lock as java.lang.Object).wait(8)
+                                            condition.await(8, TimeUnit.MILLISECONDS)
                                         } catch (_: InterruptedException) {
                                             return@Thread
                                         }
@@ -157,8 +161,9 @@ class GroupMusicPlayer {
                             }
                         }
 
-                        if (frameToWrite != null) {
-                            val processed = applySmoothVolume(frameToWrite)
+                        val toWrite = frameToWrite
+                        if (toWrite != null) {
+                            val processed = applySmoothVolume(toWrite)
                             audioTrack?.write(processed, 0, processed.size)
                         }
                     } catch (_: InterruptedException) {
@@ -182,7 +187,7 @@ class GroupMusicPlayer {
 
     fun playFrame(pcmData: ByteArray, sequence: Int = -1) {
         if (!isPlaying || pcmData.isEmpty()) return
-        synchronized(lock) {
+        lock.withLock {
             val seq = if (sequence >= 0) {
                 sequence
             } else {
@@ -208,7 +213,7 @@ class GroupMusicPlayer {
                 nextPlaySequence = (oldest + 1) and 0xFFFF
             }
 
-            (lock as java.lang.Object).notifyAll()
+            condition.signalAll()
         }
     }
 
@@ -221,7 +226,7 @@ class GroupMusicPlayer {
     }
 
     fun clear() {
-        synchronized(lock) {
+        lock.withLock {
             frameMap.clear()
             nextPlaySequence = -1
             isBuffering = true

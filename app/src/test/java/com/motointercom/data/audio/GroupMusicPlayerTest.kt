@@ -1,13 +1,13 @@
 package com.motointercom.data.audio
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class GroupMusicPlayerTest {
 
     @Test
-    fun `music player constants enforce low latency and correct frame size`() {
+    fun testMusicPlayerConstantsAndInitialState() {
         assertEquals(16000, GroupMusicPlayer.MUSIC_SAMPLE_RATE)
         assertEquals(320, GroupMusicPlayer.SAMPLES_PER_FRAME)
         assertEquals(640, GroupMusicPlayer.BYTES_PER_FRAME)
