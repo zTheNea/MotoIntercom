@@ -81,6 +81,8 @@ class IntercomService : Service(), IntercomController {
     private var systemAudioCapture: SystemAudioCapture? = null
     private var transport: UdpAudioTransport? = null
     private var voiceDuckJob: Job? = null
+    @Volatile private var isVoiceDuckingActive = false
+    @Volatile private var lastVoiceActivityMs = 0L
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
 
@@ -339,10 +341,19 @@ class IntercomService : Service(), IntercomController {
 
         // Wire microphone → transport
         capture.onAudioCaptured = { pcm ->
+            val isPlayingMusic = _isMusicPlaying.value
             val canTransmit = when {
                 _isMuted.value -> false
-                capture.voxEnabled -> true
                 _isPttActive.value -> true
+                capture.voxEnabled -> {
+                    // When music is actively playing locally, raise threshold to prevent
+                    // helmet/speaker acoustic feedback from leaking as duplicate voice packets
+                    if (isPlayingMusic) {
+                        _amplitude.value > 0.085f
+                    } else {
+                        true
+                    }
+                }
                 else -> false
             }
             if (canTransmit) {
@@ -392,6 +403,7 @@ class IntercomService : Service(), IntercomController {
         _sessionTerminated.value = true
         riderResetJobs.values.forEach { it.cancel() }
         riderResetJobs.clear()
+        isVoiceDuckingActive = false
         voiceDuckJob?.cancel()
         voiceDuckJob = null
         stopSystemAudioSharing()
@@ -474,13 +486,25 @@ class IntercomService : Service(), IntercomController {
     }
 
     private fun notifyVoiceActivity() {
-        musicPlayer.setDucked(true)
-        audioRouteManager.requestSpeechFocus()
-        voiceDuckJob?.cancel()
-        voiceDuckJob = serviceScope.launch(Dispatchers.Default) {
-            delay(600)
-            musicPlayer.setDucked(false)
-            audioRouteManager.abandonSpeechFocus()
+        lastVoiceActivityMs = android.os.SystemClock.elapsedRealtime()
+        if (!isVoiceDuckingActive) {
+            isVoiceDuckingActive = true
+            musicPlayer.setDucked(true)
+            audioRouteManager.requestSpeechFocus()
+            voiceDuckJob?.cancel()
+            voiceDuckJob = serviceScope.launch(Dispatchers.Default) {
+                while (isVoiceDuckingActive) {
+                    val elapsed = android.os.SystemClock.elapsedRealtime() - lastVoiceActivityMs
+                    val remaining = 1000L - elapsed
+                    if (remaining <= 0) {
+                        isVoiceDuckingActive = false
+                        musicPlayer.setDucked(false)
+                        audioRouteManager.abandonSpeechFocus()
+                        break
+                    }
+                    delay(remaining)
+                }
+            }
         }
     }
 

@@ -10,6 +10,7 @@ import com.motointercom.domain.model.Rider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -41,6 +42,8 @@ class UdpAudioTransport(
     private var receiveJob: Job? = null
     private var heartbeatJob: Job? = null
     private var sweepJob: Job? = null
+    private var musicSendChannel: Channel<ByteArray>? = null
+    private var musicSendJob: Job? = null
 
     private val clientRegistry = ClientRegistry()
     private val reconnectionManager = ReconnectionManager()
@@ -80,6 +83,7 @@ class UdpAudioTransport(
             }
             Log.d(TAG, "HOST UDP socket active on :$AUDIO_PORT | localId=$localId | name=$localRiderName")
             startReceiving()
+            startMusicSender()
             startHostSweepAndRosterJob()
             true
         } catch (e: Exception) {
@@ -108,6 +112,7 @@ class UdpAudioTransport(
             Log.d(TAG, "CLIENT UDP socket active on port ${socket?.localPort} → host=$hostIp:$AUDIO_PORT | localId=$localId | name=$localRiderName")
 
             startReceiving()
+            startMusicSender()
 
             reconnectionManager.reset()
             reconnectionManager.onReconnectionStateChanged = { state -> onReconnectionStateChanged?.invoke(state) }
@@ -180,18 +185,29 @@ class UdpAudioTransport(
         }
     }
 
+    private fun startMusicSender() {
+        musicSendJob?.cancel()
+        val channel = Channel<ByteArray>(Channel.UNLIMITED)
+        musicSendChannel = channel
+        musicSendJob = scope.launch(Dispatchers.IO) {
+            try {
+                for (packet in channel) {
+                    dispatchRaw(packet)
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
     fun sendMusicFrame(pcm: ByteArray, sampleRate: Int = 16000) {
         val seq = musicSequence.getAndIncrement() and 0xFFFF
-        scope.launch(Dispatchers.IO) {
-            val packet = PacketCodec.buildMusicFramePacket(
-                sequence = seq,
-                sessionToken = sessionToken,
-                localId = localId,
-                pcm = pcm,
-                sampleRate = sampleRate
-            )
-            dispatchRaw(packet)
-        }
+        val packet = PacketCodec.buildMusicFramePacket(
+            sequence = seq,
+            sessionToken = sessionToken,
+            localId = localId,
+            pcm = pcm,
+            sampleRate = sampleRate
+        )
+        musicSendChannel?.trySend(packet)
     }
 
     fun sendMusicCtrl(action: Byte, trackTitle: String) {
@@ -221,6 +237,10 @@ class UdpAudioTransport(
         receiveJob?.cancel()
         heartbeatJob?.cancel()
         sweepJob?.cancel()
+        musicSendJob?.cancel()
+        musicSendJob = null
+        musicSendChannel?.close()
+        musicSendChannel = null
         socket?.close()
         socket = null
         clientRegistry.clear()

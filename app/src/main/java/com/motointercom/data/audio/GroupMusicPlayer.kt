@@ -27,11 +27,11 @@ class GroupMusicPlayer {
         const val SAMPLES_PER_FRAME = 320   // 20ms frame at 16kHz
         const val BYTES_PER_FRAME = SAMPLES_PER_FRAME * 2 // 16-bit = 2 bytes/sample (640 bytes)
 
-        private const val PREBUFFER_TARGET_FRAMES = 4 // 80ms initial cushion for smooth music onset
-        private const val MAX_JITTER_FRAMES = 12      // 240ms max target before trimming oldest frames
-        private const val MAX_PLC_FRAMES = 3          // Up to 60ms of smooth waveform fading
+        private const val PREBUFFER_TARGET_FRAMES = 10 // 200ms initial cushion for smooth music onset
+        private const val MAX_JITTER_FRAMES = 35      // 700ms max target before trimming oldest frames
+        private const val MAX_PLC_FRAMES = 5          // Up to 100ms of smooth waveform fading
         private const val DUCK_RATIO = 0.20f          // Volume reduced to 20% when voice intercom is active
-        private const val FADE_STEP = 0.04f           // Smooth volume interpolation per frame
+        private const val FADE_STEP = 0.05f           // Smooth volume interpolation per frame
     }
 
     private var audioTrack: AudioTrack? = null
@@ -116,7 +116,7 @@ class GroupMusicPlayer {
                                 } else {
                                     // Wait for more frames to build the initial cushion
                                     try {
-                                        (lock as java.lang.Object).wait(25)
+                                        (lock as java.lang.Object).wait(30)
                                     } catch (_: InterruptedException) {
                                         return@Thread
                                     }
@@ -131,6 +131,16 @@ class GroupMusicPlayer {
                                     nextPlaySequence = (oldest + 1) and 0xFFFF
                                 }
 
+                                if (!jitterBuffer.containsKey(nextPlaySequence)) {
+                                    // Give a short grace period (up to 15ms) for the expected packet to arrive
+                                    // before declaring packet loss, preventing premature PLC and dropped packets
+                                    try {
+                                        (lock as java.lang.Object).wait(15)
+                                    } catch (_: InterruptedException) {
+                                        return@Thread
+                                    }
+                                }
+
                                 if (jitterBuffer.containsKey(nextPlaySequence)) {
                                     frameToWrite = jitterBuffer.remove(nextPlaySequence)
                                     lastPlayedFrame = frameToWrite
@@ -141,9 +151,11 @@ class GroupMusicPlayer {
                                     if (consecutivePlcCount < MAX_PLC_FRAMES && lastPlayedFrame != null) {
                                         consecutivePlcCount++
                                         val decay = when (consecutivePlcCount) {
-                                            1 -> 0.65f
-                                            2 -> 0.35f
-                                            else -> 0.15f
+                                            1 -> 0.75f
+                                            2 -> 0.50f
+                                            3 -> 0.30f
+                                            4 -> 0.15f
+                                            else -> 0.05f
                                         }
                                         frameToWrite = generatePlcFrame(lastPlayedFrame!!, decay)
                                         nextPlaySequence = (nextPlaySequence + 1) and 0xFFFF
@@ -256,22 +268,29 @@ class GroupMusicPlayer {
 
     /**
      * Smoothly scales PCM 16-bit little-endian samples according to ducking state,
-     * applying soft-saturation to eliminate digital clipping.
+     * applying per-sample linear interpolation to eliminate zipper noise and clicks,
+     * with soft-saturation to eliminate digital clipping.
      */
     private fun applySmoothVolume(chunk: ByteArray): ByteArray {
         val targetVolume = if (isDucked) masterVolume * DUCK_RATIO else masterVolume
-
-        if (currentFadeVolume < targetVolume) {
-            currentFadeVolume = (currentFadeVolume + FADE_STEP).coerceAtMost(targetVolume)
-        } else if (currentFadeVolume > targetVolume) {
-            currentFadeVolume = (currentFadeVolume - FADE_STEP).coerceAtLeast(targetVolume)
+        val startVol = currentFadeVolume
+        val endVol = if (startVol < targetVolume) {
+            (startVol + FADE_STEP).coerceAtMost(targetVolume)
+        } else if (startVol > targetVolume) {
+            (startVol - FADE_STEP).coerceAtLeast(targetVolume)
+        } else {
+            targetVolume
         }
+        currentFadeVolume = endVol
 
         val out = ByteArray(chunk.size)
-        val vol = currentFadeVolume
+        val numSamples = chunk.size / 2
+        val step = if (numSamples > 1) (endVol - startVol) / (numSamples - 1) else 0f
 
+        var sampleIdx = 0
         var i = 0
         while (i < chunk.size - 1) {
+            val vol = startVol + step * sampleIdx
             val low = chunk[i].toInt() and 0xFF
             val high = chunk[i + 1].toInt() and 0xFF
             val sample = ((high shl 8) or low).toShort()
@@ -280,6 +299,7 @@ class GroupMusicPlayer {
             out[i] = (scaled.toInt() and 0xFF).toByte()
             out[i + 1] = ((scaled.toInt() shr 8) and 0xFF).toByte()
             i += 2
+            sampleIdx++
         }
         return out
     }

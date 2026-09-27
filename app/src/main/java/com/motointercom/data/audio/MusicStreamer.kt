@@ -91,28 +91,36 @@ class MusicStreamer(
     }
 
     private fun startStreamingLoop(frameSource: () -> ByteArray?) {
+        val frameDurationNs = FRAME_DURATION_MS * 1_000_000L // 20ms = 20,000,000 ns
         streamJob = scope.launch(Dispatchers.Default) {
-            var nextFrameTime = System.currentTimeMillis()
+            var nextFrameNano = System.nanoTime()
 
             while (isActive) {
                 if (_isPaused.value) {
                     delay(50)
-                    nextFrameTime = System.currentTimeMillis()
+                    nextFrameNano = System.nanoTime()
                     continue
                 }
 
                 val frame = frameSource()
                 if (frame != null && frame.isNotEmpty()) {
                     onFrameProduced?.invoke(frame)
+                } else {
+                    delay(10)
+                    nextFrameNano = System.nanoTime()
+                    continue
                 }
 
-                nextFrameTime += FRAME_DURATION_MS
-                val sleepTime = nextFrameTime - System.currentTimeMillis()
-                if (sleepTime > 0) {
-                    delay(sleepTime)
-                } else if (sleepTime < -100) {
-                    // Reset clock if lagging significantly
-                    nextFrameTime = System.currentTimeMillis()
+                nextFrameNano += frameDurationNs
+                val nowNano = System.nanoTime()
+                val sleepNs = nextFrameNano - nowNano
+
+                if (sleepNs > 1_500_000L) {
+                    val sleepMs = sleepNs / 1_000_000L
+                    delay(sleepMs)
+                } else if (sleepNs < -80_000_000L) {
+                    // Resynchronize clock anchor if lagging by more than 80ms
+                    nextFrameNano = System.nanoTime()
                 }
             }
         }

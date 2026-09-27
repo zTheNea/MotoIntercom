@@ -80,6 +80,7 @@ class AudioFileDecoder(
             }
 
             isInitialized = true
+            updateFilterCoefficients(sourceSampleRate)
             Log.d(TAG, "AudioFileDecoder initialized: $mime | $sourceSampleRate Hz | $sourceChannels channels")
             true
         } catch (e: Exception) {
@@ -87,6 +88,50 @@ class AudioFileDecoder(
             release()
             false
         }
+    }
+
+    // ── Anti-Aliasing Biquad Filter (2nd-order Butterworth Low-Pass at 7000 Hz) ──
+    private var filterB0 = 1.0
+    private var filterB1 = 0.0
+    private var filterB2 = 0.0
+    private var filterA1 = 0.0
+    private var filterA2 = 0.0
+    private var filterX1 = 0.0
+    private var filterX2 = 0.0
+    private var filterY1 = 0.0
+    private var filterY2 = 0.0
+    private var hasFilter = false
+
+    private fun updateFilterCoefficients(sampleRate: Int) {
+        if (sampleRate <= TARGET_SAMPLE_RATE) {
+            hasFilter = false
+            return
+        }
+        val cutoff = 7000.0 // Cut off frequencies above 7 kHz to prevent Nyquist foldback at 16 kHz
+        val omega = 2.0 * Math.PI * cutoff / sampleRate.toDouble()
+        val sinOmega = Math.sin(omega)
+        val cosOmega = Math.cos(omega)
+        val alpha = sinOmega / (2.0 * 0.70710678) // Q = 1 / sqrt(2) for maximally flat Butterworth
+
+        val a0 = 1.0 + alpha
+        filterB0 = ((1.0 - cosOmega) / 2.0) / a0
+        filterB1 = (1.0 - cosOmega) / a0
+        filterB2 = ((1.0 - cosOmega) / 2.0) / a0
+        filterA1 = (-2.0 * cosOmega) / a0
+        filterA2 = (1.0 - alpha) / a0
+
+        filterX1 = 0.0; filterX2 = 0.0; filterY1 = 0.0; filterY2 = 0.0
+        hasFilter = true
+    }
+
+    private fun applyFilter(x: Double): Double {
+        if (!hasFilter) return x
+        val y = filterB0 * x + filterB1 * filterX1 + filterB2 * filterX2 - filterA1 * filterY1 - filterA2 * filterY2
+        filterX2 = filterX1
+        filterX1 = x
+        filterY2 = filterY1
+        filterY1 = y
+        return y
     }
 
     /**
@@ -120,7 +165,17 @@ class AudioFileDecoder(
 
             // Drain output
             val outputIndex = codec!!.dequeueOutputBuffer(bufferInfo, TIMEOUT_US)
-            if (outputIndex >= 0) {
+            if (outputIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                val newFormat = codec!!.outputFormat
+                if (newFormat.containsKey(MediaFormat.KEY_SAMPLE_RATE)) {
+                    sourceSampleRate = newFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+                }
+                if (newFormat.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) {
+                    sourceChannels = newFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+                }
+                updateFilterCoefficients(sourceSampleRate)
+                Log.d(TAG, "MediaCodec format changed: $sourceSampleRate Hz, $sourceChannels channels")
+            } else if (outputIndex >= 0) {
                 val outputBuffer: ByteBuffer? = codec!!.getOutputBuffer(outputIndex)
                 if (outputBuffer != null && bufferInfo.size > 0) {
                     val chunk = ByteArray(bufferInfo.size)
@@ -167,18 +222,19 @@ class AudioFileDecoder(
         pcmResidualBuffer.reset()
         resampleInputBuffer.clear()
         resamplePhase = 0.0
+        filterX1 = 0.0; filterX2 = 0.0; filterY1 = 0.0; filterY2 = 0.0
     }
 
     /**
      * Converts raw 16-bit PCM from [srcRate] and [srcChannels] to 16,000 Hz mono
-     * using a continuous fractional-phase streaming resampler.
+     * using Butterworth anti-aliasing filtering and high-precision fractional-phase linear interpolation.
      */
     private fun resampleTo16kMono(input: ByteArray, srcRate: Int, srcChannels: Int): ByteArray {
         val totalSrcSamples = input.size / 2
         val framesCount = totalSrcSamples / srcChannels
         if (framesCount <= 0) return ByteArray(0)
 
-        // 1. Downmix to mono shorts and enqueue
+        // 1. Downmix to mono shorts, apply anti-aliasing low-pass, and enqueue
         var byteIdx = 0
         for (i in 0 until framesCount) {
             var sum = 0
@@ -191,7 +247,9 @@ class AudioFileDecoder(
                     byteIdx += 2
                 }
             }
-            resampleInputBuffer.add((sum / srcChannels).toShort())
+            val monoSample = (sum / srcChannels).toDouble()
+            val filtered = applyFilter(monoSample).roundToInt().coerceIn(-32768, 32767).toShort()
+            resampleInputBuffer.add(filtered)
         }
 
         // If source matches target exactly, drain directly
@@ -209,8 +267,22 @@ class AudioFileDecoder(
         val ratio = srcRate.toDouble() / TARGET_SAMPLE_RATE.toDouble()
         val outStream = ByteArrayOutputStream()
 
-        // Continuous streaming linear interpolation across chunks
-        while (resampleInputBuffer.size >= 2) {
+        // Robust continuous streaming linear interpolation
+        while (true) {
+            val advance = resamplePhase.toInt()
+            if (resampleInputBuffer.size < advance + 2) {
+                // Wait for more input samples before interpolating across boundary
+                break
+            }
+
+            if (advance > 0) {
+                repeat(advance) {
+                    resampleInputBuffer.removeFirst()
+                }
+                resamplePhase -= advance.toDouble()
+            }
+
+            // Guaranteed: 0.0 <= resamplePhase < 1.0 and resampleInputBuffer.size >= 2
             val s0 = resampleInputBuffer[0].toDouble()
             val s1 = resampleInputBuffer[1].toDouble()
             val interpolated = (s0 + resamplePhase * (s1 - s0)).roundToInt().coerceIn(-32768, 32767)
@@ -219,10 +291,6 @@ class AudioFileDecoder(
             outStream.write((interpolated shr 8) and 0xFF)
 
             resamplePhase += ratio
-            while (resamplePhase >= 1.0 && resampleInputBuffer.size >= 2) {
-                resamplePhase -= 1.0
-                resampleInputBuffer.removeFirst()
-            }
         }
 
         return outStream.toByteArray()
