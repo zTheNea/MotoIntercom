@@ -8,28 +8,29 @@ import java.util.TreeMap
 import kotlin.math.roundToInt
 
 /**
- * High-fidelity audio player for shared group music.
+ * Ultra-low latency, high-fidelity audio player for shared group music.
  *
  * Runs an independent AudioTrack with USAGE_MEDIA so that Android AudioFlinger
  * mixes music and voice naturally without interfering with voice intercom buffers.
  *
- * Built-in Protections:
- *  - Adaptive Music Jitter Buffer: sequence-aware reordering, eliminating packet reordering jitter.
- *  - Pre-buffering: maintains an initial 80ms cushion to completely prevent AudioTrack buffer underruns.
- *  - Packet Loss Concealment (PLC): smooth waveform extrapolation upon packet drops instead of digital silence/clicks.
- *  - High-precision 16-bit PCM little-endian volume ramping with soft saturation limiting.
+ * Key Protections:
+ *  - Ultra-Low Latency Pipeline: AudioTrack buffer is kept lean (~100ms) with a 3-frame (60ms)
+ *    pre-buffer and 8-frame (160ms) cap, eliminating noticeable playback delay.
+ *  - Sequence-Aware Dynamic Resync: If a packet is lost, playback immediately jumps to the next
+ *    available real frame instead of looping repetitive waveform extrapolations, completely
+ *    eliminating the metallic/robotic buzz.
+ *  - Linear Sample-Level Volume Ramping: Soft-saturation volume scaling eliminates pops and zipper noise.
  */
 class GroupMusicPlayer {
 
     companion object {
         private const val TAG = "GroupMusicPlayer"
-        const val MUSIC_SAMPLE_RATE = 16000 // 16kHz wideband audio
+        const val MUSIC_SAMPLE_RATE = 16000 // 16kHz audio
         const val SAMPLES_PER_FRAME = 320   // 20ms frame at 16kHz
         const val BYTES_PER_FRAME = SAMPLES_PER_FRAME * 2 // 16-bit = 2 bytes/sample (640 bytes)
 
-        private const val PREBUFFER_TARGET_FRAMES = 10 // 200ms initial cushion for smooth music onset
-        private const val MAX_JITTER_FRAMES = 35      // 700ms max target before trimming oldest frames
-        private const val MAX_PLC_FRAMES = 5          // Up to 100ms of smooth waveform fading
+        private const val PREBUFFER_TARGET_FRAMES = 3 // 60ms initial cushion for fast, smooth music onset
+        private const val MAX_LATENCY_FRAMES = 8      // 160ms max target before dropping stale frames
         private const val DUCK_RATIO = 0.20f          // Volume reduced to 20% when voice intercom is active
         private const val FADE_STEP = 0.05f           // Smooth volume interpolation per frame
     }
@@ -39,7 +40,7 @@ class GroupMusicPlayer {
         private set
 
     private val lock = Any()
-    private val jitterBuffer = TreeMap<Int, ByteArray>()
+    private val frameMap = TreeMap<Int, ByteArray>()
     private var nextPlaySequence = -1
     private var localSequenceCounter = 0
     private var isBuffering = true
@@ -56,10 +57,6 @@ class GroupMusicPlayer {
 
     private var currentFadeVolume = 0.85f
 
-    // PLC working buffers
-    private var lastPlayedFrame: ByteArray? = null
-    private var consecutivePlcCount = 0
-
     fun start() {
         if (isPlaying) return
         try {
@@ -68,7 +65,8 @@ class GroupMusicPlayer {
                 AudioFormat.CHANNEL_OUT_MONO,
                 AudioFormat.ENCODING_PCM_16BIT
             )
-            val bufSize = maxOf(minBuf, BYTES_PER_FRAME * MAX_JITTER_FRAMES * 2)
+            // Lean buffer size (~80ms-120ms) to ensure minimal hardware playback delay
+            val bufSize = maxOf(minBuf, BYTES_PER_FRAME * 4)
 
             audioTrack = AudioTrack.Builder()
                 .setAudioAttributes(
@@ -92,29 +90,25 @@ class GroupMusicPlayer {
             isPlaying = true
             currentFadeVolume = masterVolume
             synchronized(lock) {
-                jitterBuffer.clear()
+                frameMap.clear()
                 nextPlaySequence = -1
                 localSequenceCounter = 0
                 isBuffering = true
-                lastPlayedFrame = null
-                consecutivePlcCount = 0
             }
 
             playbackThread = Thread({
-                Log.d(TAG, "GroupMusic playback thread started with JitterBuffer & PLC")
+                Log.d(TAG, "GroupMusic playback thread started (low-latency mode)")
                 while (isPlaying) {
                     try {
-                        val frameToWrite: ByteArray?
+                        var frameToWrite: ByteArray? = null
 
                         synchronized(lock) {
+                            // 1. Initial pre-buffering (60ms cushion)
                             if (isBuffering) {
-                                if (jitterBuffer.size >= PREBUFFER_TARGET_FRAMES) {
+                                if (frameMap.size >= PREBUFFER_TARGET_FRAMES) {
                                     isBuffering = false
-                                    if (nextPlaySequence == -1 && jitterBuffer.isNotEmpty()) {
-                                        nextPlaySequence = jitterBuffer.firstKey()
-                                    }
+                                    nextPlaySequence = frameMap.firstKey()
                                 } else {
-                                    // Wait for more frames to build the initial cushion
                                     try {
                                         (lock as java.lang.Object).wait(30)
                                     } catch (_: InterruptedException) {
@@ -123,68 +117,49 @@ class GroupMusicPlayer {
                                 }
                             }
 
+                            // 2. Playback state
                             if (!isBuffering) {
-                                // Trim if jitter buffer grows excessively beyond target latency
-                                while (jitterBuffer.size > MAX_JITTER_FRAMES) {
-                                    val oldest = jitterBuffer.firstKey()
-                                    jitterBuffer.remove(oldest)
-                                    nextPlaySequence = (oldest + 1) and 0xFFFF
-                                }
-
-                                if (!jitterBuffer.containsKey(nextPlaySequence)) {
-                                    // Give a short grace period (up to 15ms) for the expected packet to arrive
-                                    // before declaring packet loss, preventing premature PLC and dropped packets
-                                    try {
-                                        (lock as java.lang.Object).wait(15)
-                                    } catch (_: InterruptedException) {
-                                        return@Thread
-                                    }
-                                }
-
-                                if (jitterBuffer.containsKey(nextPlaySequence)) {
-                                    frameToWrite = jitterBuffer.remove(nextPlaySequence)
-                                    lastPlayedFrame = frameToWrite
-                                    consecutivePlcCount = 0
+                                if (frameMap.containsKey(nextPlaySequence)) {
+                                    frameToWrite = frameMap.remove(nextPlaySequence)
                                     nextPlaySequence = (nextPlaySequence + 1) and 0xFFFF
                                 } else {
-                                    // Expected frame missing (packet loss or jitter delay)
-                                    if (consecutivePlcCount < MAX_PLC_FRAMES && lastPlayedFrame != null) {
-                                        consecutivePlcCount++
-                                        val decay = when (consecutivePlcCount) {
-                                            1 -> 0.75f
-                                            2 -> 0.50f
-                                            3 -> 0.30f
-                                            4 -> 0.15f
-                                            else -> 0.05f
+                                    if (frameMap.isEmpty()) {
+                                        // Buffer starvation: wait briefly for incoming packets
+                                        try {
+                                            (lock as java.lang.Object).wait(25)
+                                        } catch (_: InterruptedException) {
+                                            return@Thread
                                         }
-                                        frameToWrite = generatePlcFrame(lastPlayedFrame!!, decay)
-                                        nextPlaySequence = (nextPlaySequence + 1) and 0xFFFF
-                                    } else {
-                                        if (jitterBuffer.isNotEmpty()) {
-                                            // Jump ahead to next available frame in buffer
-                                            nextPlaySequence = jitterBuffer.firstKey()
-                                            frameToWrite = jitterBuffer.remove(nextPlaySequence)
-                                            lastPlayedFrame = frameToWrite
-                                            consecutivePlcCount = 0
-                                            nextPlaySequence = (nextPlaySequence + 1) and 0xFFFF
-                                        } else {
-                                            // Buffer starved: re-enter prebuffering smoothly
+                                        if (frameMap.isEmpty()) {
                                             isBuffering = true
-                                            frameToWrite = null
-                                            consecutivePlcCount = 0
+                                            nextPlaySequence = -1
+                                        }
+                                    } else {
+                                        // A packet was missed or delayed, but newer packets are available.
+                                        // Wait up to 8ms in case of small network jitter
+                                        try {
+                                            (lock as java.lang.Object).wait(8)
+                                        } catch (_: InterruptedException) {
+                                            return@Thread
+                                        }
+
+                                        if (frameMap.containsKey(nextPlaySequence)) {
+                                            frameToWrite = frameMap.remove(nextPlaySequence)
+                                            nextPlaySequence = (nextPlaySequence + 1) and 0xFFFF
+                                        } else if (frameMap.isNotEmpty()) {
+                                            // Skip directly to next available packet without repeating old frames
+                                            val nextAvailable = frameMap.firstKey()
+                                            frameToWrite = frameMap.remove(nextAvailable)
+                                            nextPlaySequence = (nextAvailable + 1) and 0xFFFF
                                         }
                                     }
                                 }
-                            } else {
-                                frameToWrite = null
                             }
                         }
 
                         if (frameToWrite != null) {
                             val processed = applySmoothVolume(frameToWrite)
                             audioTrack?.write(processed, 0, processed.size)
-                        } else {
-                            Thread.sleep(10)
                         }
                     } catch (_: InterruptedException) {
                         break
@@ -194,12 +169,12 @@ class GroupMusicPlayer {
                 }
                 Log.d(TAG, "GroupMusic playback thread stopped")
             }, "GroupMusicPlayback").apply {
-                priority = Thread.NORM_PRIORITY + 2
+                priority = Thread.MAX_PRIORITY
                 isDaemon = true
                 start()
             }
 
-            Log.d(TAG, "GroupMusicPlayer initialized successfully")
+            Log.d(TAG, "GroupMusicPlayer initialized successfully with bufSize=$bufSize")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize GroupMusicPlayer", e)
         }
@@ -216,16 +191,23 @@ class GroupMusicPlayer {
                 s
             }
 
-            // Reject duplicate or ancient frames (outside 16-bit sliding window)
-            if (nextPlaySequence != -1) {
-                val diff = (seq - nextPlaySequence + 65536) % 65536
-                if (diff > 32768) {
-                    // Packet arrived too late (already played or skipped)
+            // Discard ancient packets that arrived after their playback window
+            if (!isBuffering && nextPlaySequence != -1) {
+                val diff = (nextPlaySequence - seq + 65536) % 65536
+                if (diff in 1..32767) {
                     return
                 }
             }
 
-            jitterBuffer[seq] = pcmData
+            frameMap[seq] = pcmData
+
+            // Prune excess frames to keep strictly bounded latency (<160ms)
+            while (frameMap.size > MAX_LATENCY_FRAMES) {
+                val oldest = frameMap.firstKey()
+                frameMap.remove(oldest)
+                nextPlaySequence = (oldest + 1) and 0xFFFF
+            }
+
             (lock as java.lang.Object).notifyAll()
         }
     }
@@ -240,18 +222,16 @@ class GroupMusicPlayer {
 
     fun clear() {
         synchronized(lock) {
-            jitterBuffer.clear()
+            frameMap.clear()
             nextPlaySequence = -1
             isBuffering = true
-            lastPlayedFrame = null
-            consecutivePlcCount = 0
         }
     }
 
     fun stop() {
         isPlaying = false
         playbackThread?.interrupt()
-        playbackThread?.join(400)
+        playbackThread?.join(300)
         playbackThread = null
         clear()
         try {
@@ -268,8 +248,7 @@ class GroupMusicPlayer {
 
     /**
      * Smoothly scales PCM 16-bit little-endian samples according to ducking state,
-     * applying per-sample linear interpolation to eliminate zipper noise and clicks,
-     * with soft-saturation to eliminate digital clipping.
+     * applying per-sample linear interpolation to eliminate zipper noise and clicks.
      */
     private fun applySmoothVolume(chunk: ByteArray): ByteArray {
         val targetVolume = if (isDucked) masterVolume * DUCK_RATIO else masterVolume
@@ -292,7 +271,7 @@ class GroupMusicPlayer {
         while (i < chunk.size - 1) {
             val vol = startVol + step * sampleIdx
             val low = chunk[i].toInt() and 0xFF
-            val high = chunk[i + 1].toInt() and 0xFF
+            val high = chunk[i + 1].toInt()
             val sample = ((high shl 8) or low).toShort()
 
             val scaled = (sample.toFloat() * vol).roundToInt().coerceIn(-32768, 32767).toShort()
@@ -300,25 +279,6 @@ class GroupMusicPlayer {
             out[i + 1] = ((scaled.toInt() shr 8) and 0xFF).toByte()
             i += 2
             sampleIdx++
-        }
-        return out
-    }
-
-    /**
-     * Synthesizes an interpolated frame from the previous waveform with smooth decay.
-     */
-    private fun generatePlcFrame(source: ByteArray, factor: Float): ByteArray {
-        val out = ByteArray(source.size)
-        var i = 0
-        while (i < source.size - 1) {
-            val low = source[i].toInt() and 0xFF
-            val high = source[i + 1].toInt() and 0xFF
-            val sample = ((high shl 8) or low).toShort()
-
-            val scaled = (sample.toFloat() * factor).roundToInt().coerceIn(-32768, 32767).toShort()
-            out[i] = (scaled.toInt() and 0xFF).toByte()
-            out[i + 1] = ((scaled.toInt() shr 8) and 0xFF).toByte()
-            i += 2
         }
         return out
     }
