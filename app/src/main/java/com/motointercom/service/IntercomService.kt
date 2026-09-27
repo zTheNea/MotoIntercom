@@ -648,9 +648,9 @@ class IntercomService : Service(), IntercomController {
         _musicTrack.value = null
     }
 
-    override fun setMusicVolume(vol: Float) {
-        _musicVolume.value = vol
-        musicPlayer.setMasterVolume(vol)
+    override fun setMusicVolume(volume: Float) {
+        _musicVolume.value = volume
+        musicPlayer.setMasterVolume(volume)
     }
 
     override fun setMultitasking(enabled: Boolean) {
