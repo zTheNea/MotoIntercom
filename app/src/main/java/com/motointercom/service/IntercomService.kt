@@ -55,7 +55,7 @@ import kotlinx.coroutines.launch
  * Keeps running while the app is in background (important while riding).
  * Manages: AudioCapture → UdpTransport → AudioMixer → AudioPlayer → AudioRouteManager
  */
-class IntercomService : Service() {
+class IntercomService : Service(), IntercomController {
 
     companion object {
         private const val TAG = "IntercomService"
@@ -87,53 +87,54 @@ class IntercomService : Service() {
     // ── Observables ──────────────────────────────────────────────────────
 
     private val _isMuted = MutableStateFlow(false)
-    val isMuted: StateFlow<Boolean> = _isMuted.asStateFlow()
+    override val isMuted: StateFlow<Boolean> = _isMuted.asStateFlow()
 
     private val _isPttActive = MutableStateFlow(false)
-    val isPttActive: StateFlow<Boolean> = _isPttActive.asStateFlow()
+    override val isPttActive: StateFlow<Boolean> = _isPttActive.asStateFlow()
 
     private val _amplitude = MutableStateFlow(0f)
-    val amplitude: StateFlow<Float> = _amplitude.asStateFlow()
+    override val amplitude: StateFlow<Float> = _amplitude.asStateFlow()
 
     private val _connectedClients = MutableStateFlow(1)
-    val connectedClients: StateFlow<Int> = _connectedClients.asStateFlow()
+    override val connectedClients: StateFlow<Int> = _connectedClients.asStateFlow()
 
     private val _riders = MutableStateFlow<List<Rider>>(emptyList())
-    val riders: StateFlow<List<Rider>> = _riders.asStateFlow()
+    override val riders: StateFlow<List<Rider>> = _riders.asStateFlow()
 
     private val _sessionTerminated = MutableStateFlow(false)
-    val sessionTerminated: StateFlow<Boolean> = _sessionTerminated.asStateFlow()
+    override val sessionTerminated: StateFlow<Boolean> = _sessionTerminated.asStateFlow()
 
     private val _reconnectionState = MutableStateFlow(ReconnectionState())
-    val reconnectionState: StateFlow<ReconnectionState> = _reconnectionState.asStateFlow()
+    override val reconnectionState: StateFlow<ReconnectionState> = _reconnectionState.asStateFlow()
 
     private val _musicTrack = MutableStateFlow<String?>(null)
-    val musicTrack: StateFlow<String?> = _musicTrack.asStateFlow()
+    override val musicTrack: StateFlow<String?> = _musicTrack.asStateFlow()
 
     private val _isMusicPlaying = MutableStateFlow(false)
-    val isMusicPlaying: StateFlow<Boolean> = _isMusicPlaying.asStateFlow()
+    override val isMusicPlaying: StateFlow<Boolean> = _isMusicPlaying.asStateFlow()
 
     private val _isMusicHost = MutableStateFlow(false)
-    val isMusicHost: StateFlow<Boolean> = _isMusicHost.asStateFlow()
+    override val isMusicHost: StateFlow<Boolean> = _isMusicHost.asStateFlow()
 
     private val _musicSharerName = MutableStateFlow<String?>(null)
-    val musicSharerName: StateFlow<String?> = _musicSharerName.asStateFlow()
+    override val musicSharerName: StateFlow<String?> = _musicSharerName.asStateFlow()
 
     private val _isSystemAudioActive = MutableStateFlow(false)
-    val isSystemAudioActive: StateFlow<Boolean> = _isSystemAudioActive.asStateFlow()
+    override val isSystemAudioActive: StateFlow<Boolean> = _isSystemAudioActive.asStateFlow()
 
     private val _musicVolume = MutableStateFlow(0.85f)
-    val musicVolume: StateFlow<Float> = _musicVolume.asStateFlow()
+    override val musicVolume: StateFlow<Float> = _musicVolume.asStateFlow()
 
-    val isSpeakerActive: StateFlow<Boolean> get() = audioRouteManager.isSpeakerActive
+    override val isSpeakerActive: StateFlow<Boolean> get() = audioRouteManager.isSpeakerActive
     val hasHeadset: StateFlow<Boolean> get() = audioRouteManager.hasHeadset
     val currentRouteName: StateFlow<String> get() = audioRouteManager.currentRouteName
-    val isMultitaskingActive: StateFlow<Boolean> get() = audioRouteManager.isMultitasking
+    override val isMultitaskingActive: StateFlow<Boolean> get() = audioRouteManager.isMultitasking
 
     // ── Binder ───────────────────────────────────────────────────────────
 
     inner class LocalBinder : Binder() {
         fun getService(): IntercomService = this@IntercomService
+        fun getController(): IntercomController = this@IntercomService
     }
     private val binder = LocalBinder()
 
@@ -381,12 +382,12 @@ class IntercomService : Service() {
         }
     }
 
-    fun resetTermination() {
+    override fun resetTermination() {
         _sessionTerminated.value = false
         _reconnectionState.value = ReconnectionState()
     }
 
-    fun stopIntercom() {
+    override fun stopIntercom() {
         Log.d(TAG, "stopIntercom called")
         _sessionTerminated.value = true
         riderResetJobs.values.forEach { it.cancel() }
@@ -485,7 +486,7 @@ class IntercomService : Service() {
 
     // ── Controls ─────────────────────────────────────────────────────────
 
-    fun playDemoMusic() {
+    override fun playDemoMusic() {
         if (_isMusicPlaying.value && !_isMusicHost.value) {
             Log.w(TAG, "Cannot play demo: ${_musicSharerName.value} is already sharing music in the room")
             return
@@ -496,7 +497,7 @@ class IntercomService : Service() {
         musicStreamer.playDemo()
     }
 
-    fun playUriMusic(uri: Uri, title: String) {
+    override fun playUriMusic(uri: Uri, title: String) {
         if (_isMusicPlaying.value && !_isMusicHost.value) {
             Log.w(TAG, "Cannot play audio file: ${_musicSharerName.value} is already sharing music in the room")
             return
@@ -507,7 +508,7 @@ class IntercomService : Service() {
         musicStreamer.playUri(this, uri, title)
     }
 
-    fun startSystemAudioSharing(resultCode: Int, data: Intent) {
+    override fun startSystemAudioSharing(resultCode: Int, data: Intent) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             Log.e(TAG, "AudioPlaybackCapture requires Android 10+")
             return
@@ -572,7 +573,7 @@ class IntercomService : Service() {
         )
     }
 
-    fun stopSystemAudioSharing() {
+    override fun stopSystemAudioSharing() {
         if (_isSystemAudioActive.value) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 systemAudioCapture?.stopCapture()
@@ -595,7 +596,7 @@ class IntercomService : Service() {
         }
     }
 
-    fun pauseMusic() {
+    override fun pauseMusic() {
         if (!_isMusicHost.value) return
         if (_isSystemAudioActive.value) {
             // For system audio, pause stops capture
@@ -605,14 +606,14 @@ class IntercomService : Service() {
         musicStreamer.pause()
     }
 
-    fun resumeMusic() {
+    override fun resumeMusic() {
         if (!_isMusicHost.value) return
         if (!_isSystemAudioActive.value) {
             musicStreamer.resume()
         }
     }
 
-    fun stopMusic() {
+    override fun stopMusic() {
         if (!_isMusicHost.value) return
         stopSystemAudioSharing()
         musicStreamer.stop()
@@ -623,16 +624,16 @@ class IntercomService : Service() {
         _musicTrack.value = null
     }
 
-    fun setMusicVolume(vol: Float) {
+    override fun setMusicVolume(vol: Float) {
         _musicVolume.value = vol
         musicPlayer.setMasterVolume(vol)
     }
 
-    fun setMultitasking(enabled: Boolean) {
+    override fun setMultitasking(enabled: Boolean) {
         audioRouteManager.setMultitasking(enabled)
     }
 
-    fun setMuted(muted: Boolean) {
+    override fun setMuted(muted: Boolean) {
         _isMuted.value = muted
         if (muted && !capture.voxEnabled) {
             capture.pause()
@@ -641,15 +642,15 @@ class IntercomService : Service() {
         }
     }
 
-    fun setPttActive(active: Boolean) {
+    override fun setPttActive(active: Boolean) {
         _isPttActive.value = active
     }
 
-    fun setVox(enabled: Boolean) {
+    override fun setVox(enabled: Boolean) {
         capture.voxEnabled = enabled
     }
 
-    fun setSpeaker(on: Boolean) {
+    override fun setSpeaker(on: Boolean) {
         audioRouteManager.setSpeaker(on)
     }
 

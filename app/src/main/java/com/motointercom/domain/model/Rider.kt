@@ -13,5 +13,13 @@ data class Rider(
     val isTalking: Boolean = false,
     val signalLevel: Float = 0f,    // 0.0 to 1.0 — voice amplitude
     val isConnected: Boolean = true,
-    val isHost: Boolean = false
+    val isHost: Boolean = false,
+    val linkQuality: LinkQuality = LinkQuality.OPTIMA
 )
+
+enum class LinkQuality(val label: String) {
+    OPTIMA("Optima"),
+    BUENA("Buena"),
+    INESTABLE("Inestable"),
+    CRITICA("Critica")
+}

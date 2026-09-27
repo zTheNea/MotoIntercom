@@ -2,6 +2,7 @@ package com.motointercom.data.audio
 
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothHeadset
+import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -41,7 +42,7 @@ class AudioRouteManager(private val context: Context) {
 
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val btAdapter: BluetoothAdapter? = BluetoothAdapter.getDefaultAdapter()
+    private val btAdapter: BluetoothAdapter? = (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
     private var btHeadset: BluetoothHeadset? = null
 
     private var isRouting = false
@@ -155,6 +156,7 @@ class AudioRouteManager(private val context: Context) {
         updateAudioRoute()
     }
 
+    @Suppress("DEPRECATION")
     fun stopRouting() {
         isRouting = false
         forceSpeaker = false
@@ -340,6 +342,7 @@ class AudioRouteManager(private val context: Context) {
         }
     }
 
+    @Suppress("DEPRECATION")
     private fun routeLegacy(useSpeaker: Boolean, btDevice: AudioDeviceInfo?, wiredDevice: AudioDeviceInfo?) {
         if (useSpeaker) {
             stopScoLegacy()

@@ -324,6 +324,7 @@ class UdpAudioTransport(
 
             PacketCodec.MSG_AUDIO -> {
                 if (packet.length >= 16) {
+                    val seq = ByteBuffer.wrap(data, 11, 2).short.toInt() and 0xFFFF
                     val pcmLen = ByteBuffer.wrap(data, 13, 2).short.toInt()
                     val ampByte = data[15].toInt() and 0xFF
                     val amp = ampByte / 100f
@@ -344,7 +345,7 @@ class UdpAudioTransport(
 
                         if (isHost) {
                             clientRegistry.get(senderId)?.apply {
-                                lastSeen = System.currentTimeMillis()
+                                recordPacket(seq.toLong())
                                 address = InetSocketAddress(packet.address, packet.port)
                                 isTalking = amp > 0.08f
                                 amplitude = amp

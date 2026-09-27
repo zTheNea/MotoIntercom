@@ -40,6 +40,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.motointercom.domain.model.LinkQuality
 import com.motointercom.domain.model.ReconnectionState
 import com.motointercom.domain.model.Rider
 import com.motointercom.domain.model.Session
@@ -671,6 +672,7 @@ private fun RiderGrid(
                         isLocal = false,
                         isTalking = rider.isTalking,
                         isConnected = rider.isConnected,
+                        linkQuality = rider.linkQuality,
                         isSunMode = isSunMode,
                         sunCard = sunCard,
                         sunBorder = sunBorder,
@@ -703,6 +705,7 @@ private fun RiderCard(
     isLocal: Boolean,
     isTalking: Boolean,
     isConnected: Boolean,
+    linkQuality: LinkQuality = LinkQuality.OPTIMA,
     isSunMode: Boolean = false,
     sunCard: Color = BackgroundCard,
     sunBorder: Color = DividerColor,
@@ -846,12 +849,24 @@ private fun RiderCard(
                 )
             }
         } else {
+            val statusLabel = when {
+                !isConnected -> "• fuera"
+                isLocal -> "• listo"
+                else -> "• ${linkQuality.label}"
+            }
+            val statusColor = when {
+                !isConnected -> TextMuted
+                isLocal || linkQuality == LinkQuality.OPTIMA -> if (isSunMode) Color(0xFF1B5E20) else GreenActive.copy(alpha = 0.7f)
+                linkQuality == LinkQuality.BUENA -> if (isSunMode) Color(0xFF1565C0) else BlueInfo.copy(alpha = 0.7f)
+                linkQuality == LinkQuality.INESTABLE -> if (isSunMode) Color(0xFFE65100) else OrangeFlame.copy(alpha = 0.7f)
+                else -> if (isSunMode) Color(0xFFB71C1C) else RedDanger.copy(alpha = 0.7f)
+            }
             Text(
-                if (isConnected) "• listo" else "• fuera",
+                statusLabel,
                 style = MaterialTheme.typography.labelSmall,
                 fontSize = 9.5.sp,
                 fontWeight = if (isSunMode) FontWeight.Bold else FontWeight.Normal,
-                color = if (isConnected) (if (isSunMode) Color(0xFF1B5E20) else GreenActive.copy(alpha = 0.7f)) else TextMuted
+                color = statusColor
             )
         }
     }

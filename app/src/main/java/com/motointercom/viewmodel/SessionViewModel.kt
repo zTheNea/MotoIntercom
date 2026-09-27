@@ -14,6 +14,7 @@ import com.motointercom.domain.model.ReconnectionState
 import com.motointercom.domain.model.Rider
 import com.motointercom.domain.model.Session
 import com.motointercom.domain.model.SessionRole
+import com.motointercom.service.IntercomController
 import com.motointercom.service.IntercomService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -95,11 +96,11 @@ class SessionViewModel @Inject constructor(
     private val _isSystemAudioActive = MutableStateFlow(false)
     val isSystemAudioActive: StateFlow<Boolean> = _isSystemAudioActive.asStateFlow()
 
-    private var service: IntercomService? = null
+    private var service: IntercomController? = null
 
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName, binder: IBinder) {
-            val localService = (binder as IntercomService.LocalBinder).getService()
+            val localService = (binder as? IntercomService.LocalBinder)?.getController() ?: return
             service = localService
             localService.resetTermination()
             _sessionTerminated.value = false

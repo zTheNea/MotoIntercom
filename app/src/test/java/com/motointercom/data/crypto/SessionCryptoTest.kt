@@ -71,4 +71,43 @@ class SessionCryptoTest {
         val result = SessionCrypto.decrypt(shortData, key)
         assertArrayEquals(shortData, result)
     }
+
+    @Test
+    fun `computeMac and verifyMac successfully validate unmodified data`() {
+        val key = SessionCrypto.generateSessionKey()
+        val data = "Audio frame payload containing PCM samples".toByteArray(Charsets.UTF_8)
+
+        val mac = SessionCrypto.computeMac(data, key = key)
+        assertEquals(SessionCrypto.MAC_LENGTH, mac.size)
+
+        val isValid = SessionCrypto.verifyMac(data, expectedMac = mac, key = key)
+        org.junit.Assert.assertTrue(isValid)
+    }
+
+    @Test
+    fun `verifyMac detects bit-flipping and altered payloads`() {
+        val key = SessionCrypto.generateSessionKey()
+        val data = "Audio frame payload containing PCM samples".toByteArray(Charsets.UTF_8)
+
+        val mac = SessionCrypto.computeMac(data, key = key)
+
+        // Alter 1 byte
+        val altered = data.clone()
+        altered[5] = (altered[5].toInt() xor 0xFF).toByte()
+
+        val isValid = SessionCrypto.verifyMac(altered, expectedMac = mac, key = key)
+        assertFalse("Altered payload must fail MAC verification", isValid)
+    }
+
+    @Test
+    fun `verifyMac with wrong key fails verification`() {
+        val key1 = SessionCrypto.generateSessionKey()
+        val key2 = SessionCrypto.generateSessionKey()
+        val data = "Audio frame payload".toByteArray(Charsets.UTF_8)
+
+        val mac = SessionCrypto.computeMac(data, key = key1)
+        val isValid = SessionCrypto.verifyMac(data, expectedMac = mac, key = key2)
+
+        assertFalse("MAC verification with different key must fail", isValid)
+    }
 }

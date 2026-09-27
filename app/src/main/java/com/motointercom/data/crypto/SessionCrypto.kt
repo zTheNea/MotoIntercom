@@ -1,9 +1,11 @@
 package com.motointercom.data.crypto
 
+import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.Base64
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
+import javax.crypto.Mac
 import javax.crypto.SecretKey
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
@@ -22,11 +24,18 @@ import javax.crypto.spec.SecretKeySpec
 object SessionCrypto {
 
     private const val ALGORITHM = "AES/CTR/NoPadding"
+    private const val MAC_ALGORITHM = "HmacSHA256"
     private const val KEY_SIZE_BITS = 128
+    const val MAC_LENGTH = 8
 
     // ThreadLocal Cipher to avoid expensive JCA Security Provider lookup per packet (50 times/sec per rider)
     private val cipherHolder = ThreadLocal.withInitial {
         Cipher.getInstance(ALGORITHM)
+    }
+
+    // ThreadLocal Mac for fast authenticated packet verification
+    private val macHolder = ThreadLocal.withInitial {
+        Mac.getInstance(MAC_ALGORITHM)
     }
 
     // Reusable cryptographically strong random generator (thread-safe)
@@ -113,4 +122,35 @@ object SessionCrypto {
      * Backward-compatible convenience overload for full array decryption.
      */
     fun decrypt(data: ByteArray, key: SecretKey): ByteArray = decrypt(data, 0, data.size, key)
+
+    /**
+     * Compute a truncated 8-byte HMAC-SHA256 authentication tag over [data].
+     */
+    fun computeMac(
+        data: ByteArray,
+        offset: Int = 0,
+        length: Int = data.size,
+        key: SecretKey
+    ): ByteArray {
+        val mac = macHolder.get() ?: Mac.getInstance(MAC_ALGORITHM)
+        mac.init(key)
+        mac.update(data, offset, length)
+        val fullMac = mac.doFinal()
+        return fullMac.copyOf(MAC_LENGTH)
+    }
+
+    /**
+     * Constant-time verification of an 8-byte HMAC tag.
+     */
+    fun verifyMac(
+        data: ByteArray,
+        offset: Int = 0,
+        length: Int = data.size,
+        expectedMac: ByteArray,
+        key: SecretKey
+    ): Boolean {
+        if (expectedMac.size != MAC_LENGTH) return false
+        val computed = computeMac(data, offset, length, key)
+        return MessageDigest.isEqual(computed, expectedMac)
+    }
 }

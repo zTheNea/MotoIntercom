@@ -70,7 +70,8 @@ class ClientRegistry {
                 isTalking = client.isTalking,
                 signalLevel = client.amplitude,
                 isConnected = client.isConnected,
-                isHost = false
+                isHost = false,
+                linkQuality = client.linkQuality
             )
         }
     }
