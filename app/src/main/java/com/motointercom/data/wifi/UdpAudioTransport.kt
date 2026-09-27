@@ -34,12 +34,16 @@ class UdpAudioTransport(
 ) {
     companion object {
         private const val TAG = "UdpAudioTransport"
-        const val AUDIO_PORT = 12346
+        const val VOICE_PORT = 12346
+        const val MUSIC_PORT = 12348
+        const val AUDIO_PORT = VOICE_PORT // Compatibility alias
         private const val MAX_PACKET = 1500
     }
 
-    private var socket: DatagramSocket? = null
-    private var receiveJob: Job? = null
+    private var voiceSocket: DatagramSocket? = null
+    private var musicSocket: DatagramSocket? = null
+    private var voiceReceiveJob: Job? = null
+    private var musicReceiveJob: Job? = null
     private var heartbeatJob: Job? = null
     private var sweepJob: Job? = null
     private var musicSendChannel: Channel<ByteArray>? = null
@@ -76,18 +80,24 @@ class UdpAudioTransport(
     fun startHost(): Boolean {
         return try {
             stop(notifyPeers = false)
-            socket = DatagramSocket(null).apply {
+            voiceSocket = DatagramSocket(null).apply {
                 reuseAddress = true
                 receiveBufferSize = MAX_PACKET * 8
-                bind(InetSocketAddress("0.0.0.0", AUDIO_PORT))
+                bind(InetSocketAddress("0.0.0.0", VOICE_PORT))
             }
-            Log.d(TAG, "HOST UDP socket active on :$AUDIO_PORT | localId=$localId | name=$localRiderName")
-            startReceiving()
+            musicSocket = DatagramSocket(null).apply {
+                reuseAddress = true
+                receiveBufferSize = MAX_PACKET * 16
+                bind(InetSocketAddress("0.0.0.0", MUSIC_PORT))
+            }
+            Log.d(TAG, "HOST sockets active: Voice on :$VOICE_PORT, Music on :$MUSIC_PORT | localId=$localId | name=$localRiderName")
+            startVoiceReceiving()
+            startMusicReceiving()
             startMusicSender()
             startHostSweepAndRosterJob()
             true
         } catch (e: Exception) {
-            Log.e(TAG, "Error starting host socket", e)
+            Log.e(TAG, "Error starting host sockets", e)
             false
         }
     }
@@ -103,15 +113,25 @@ class UdpAudioTransport(
         return try {
             stop(notifyPeers = false)
             cachedHostIp = hostIp
-            socket = DatagramSocket(null).apply {
+            voiceSocket = DatagramSocket(null).apply {
                 reuseAddress = true
                 receiveBufferSize = MAX_PACKET * 8
                 bind(InetSocketAddress(0))
             }
+            musicSocket = DatagramSocket(null).apply {
+                reuseAddress = true
+                receiveBufferSize = MAX_PACKET * 16
+                try {
+                    bind(InetSocketAddress(MUSIC_PORT))
+                } catch (_: Exception) {
+                    bind(InetSocketAddress(0))
+                }
+            }
             hostAddress = InetAddress.getByName(hostIp)
-            Log.d(TAG, "CLIENT UDP socket active on port ${socket?.localPort} → host=$hostIp:$AUDIO_PORT | localId=$localId | name=$localRiderName")
+            Log.d(TAG, "CLIENT sockets active: Voice port=${voiceSocket?.localPort} -> host:$VOICE_PORT, Music port=${musicSocket?.localPort} -> host:$MUSIC_PORT | localId=$localId")
 
-            startReceiving()
+            startVoiceReceiving()
+            startMusicReceiving()
             startMusicSender()
 
             reconnectionManager.reset()
@@ -192,7 +212,7 @@ class UdpAudioTransport(
         musicSendJob = scope.launch(Dispatchers.IO) {
             try {
                 for (packet in channel) {
-                    dispatchRaw(packet)
+                    dispatchMusicRaw(packet)
                 }
             } catch (_: Exception) {}
         }
@@ -218,7 +238,7 @@ class UdpAudioTransport(
                 action = action,
                 trackTitle = trackTitle
             )
-            dispatchRaw(packet)
+            dispatchMusicRaw(packet)
         }
     }
 
@@ -234,42 +254,45 @@ class UdpAudioTransport(
                 try { repeat(3) { broadcastByeSync() } } catch (_: Exception) {}
             }
         }
-        receiveJob?.cancel()
+        voiceReceiveJob?.cancel()
+        musicReceiveJob?.cancel()
         heartbeatJob?.cancel()
         sweepJob?.cancel()
         musicSendJob?.cancel()
         musicSendJob = null
         musicSendChannel?.close()
         musicSendChannel = null
-        socket?.close()
-        socket = null
+        voiceSocket?.close()
+        voiceSocket = null
+        musicSocket?.close()
+        musicSocket = null
         clientRegistry.clear()
         Log.d(TAG, "UdpAudioTransport stopped (notifyPeers=$notifyPeers)")
     }
 
-    // ── Receiving & Processing ───────────────────────────────────────────
+    // ── Dedicated Voice Receiving & Processing (Port 12346) ─────────────
 
-    private fun startReceiving() {
-        receiveJob?.cancel()
-        receiveJob = scope.launch(Dispatchers.IO) {
+    private fun startVoiceReceiving() {
+        voiceReceiveJob?.cancel()
+        voiceReceiveJob = scope.launch(Dispatchers.IO) {
             val recvBuffer = ByteArray(MAX_PACKET)
             val packet = DatagramPacket(recvBuffer, recvBuffer.size)
 
             while (isActive) {
                 try {
-                    val s = socket ?: break
+                    val s = voiceSocket ?: break
                     s.receive(packet)
-                    processIncoming(packet)
+                    processVoiceIncoming(packet)
                 } catch (e: Exception) {
-                    if (isActive && socket?.isClosed == false) {
-                        Log.w(TAG, "Receive error: ${e.message}")
+                    if (isActive && voiceSocket?.isClosed == false) {
+                        Log.w(TAG, "Voice receive error: ${e.message}")
                     }
                 }
             }
         }
     }
 
-    private fun processIncoming(packet: DatagramPacket) {
+    private fun processVoiceIncoming(packet: DatagramPacket) {
         if (packet.length < 11) return
 
         val data = packet.data
@@ -284,7 +307,7 @@ class UdpAudioTransport(
             // MSG_HELLO is an introduction from a new client who does not yet have the room's token.
             // For all other packet types, enforce strict token matching.
             if (msgType != PacketCodec.MSG_HELLO && !packetToken.contentEquals(sessionToken)) {
-                Log.w(TAG, "Host rejected packet (type=$msgType) with invalid session token from ${packet.address.hostAddress}")
+                Log.w(TAG, "Host rejected voice packet (type=$msgType) with invalid session token from ${packet.address.hostAddress}")
                 return
             }
         } else {
@@ -295,7 +318,7 @@ class UdpAudioTransport(
             // Allow MSG_ROSTER through before token adoption so the client can acquire room credentials.
             if (hasAdoptedToken) {
                 if (!packetToken.contentEquals(sessionToken)) {
-                    Log.w(TAG, "Client rejected packet (type=$msgType) with invalid session token from ${packet.address.hostAddress}")
+                    Log.w(TAG, "Client rejected voice packet (type=$msgType) with invalid session token from ${packet.address.hostAddress}")
                     return
                 }
             } else {
@@ -330,9 +353,9 @@ class UdpAudioTransport(
                     )
                     try {
                         // Send burst of 3 to ensure reliability over WiFi UDP
-                        socket?.send(DatagramPacket(rosterPacket, rosterPacket.size, clientAddr))
-                        socket?.send(DatagramPacket(rosterPacket, rosterPacket.size, clientAddr))
-                        socket?.send(DatagramPacket(rosterPacket, rosterPacket.size, clientAddr))
+                        voiceSocket?.send(DatagramPacket(rosterPacket, rosterPacket.size, clientAddr))
+                        voiceSocket?.send(DatagramPacket(rosterPacket, rosterPacket.size, clientAddr))
+                        voiceSocket?.send(DatagramPacket(rosterPacket, rosterPacket.size, clientAddr))
                         Log.d(TAG, "Sent direct MSG_ROSTER burst to $riderName @ $clientAddr")
                     } catch (e: Exception) {
                         Log.w(TAG, "Error sending direct roster response to $riderName: ${e.message}")
@@ -375,7 +398,7 @@ class UdpAudioTransport(
                                 }
                             }
                             onAudioReceived?.invoke(senderId, pcm, amp)
-                            relayToOthers(senderId, data, packet.length)
+                            relayVoiceToOthers(senderId, data, packet.length)
                         } else {
                             onAudioReceived?.invoke(senderId, pcm, amp)
                         }
@@ -404,7 +427,7 @@ class UdpAudioTransport(
                             currentMusicSenderId = null
                             currentMusicSenderLastSeen = 0L
                             val stopPacket = PacketCodec.buildMusicCtrlPacket(sessionToken, localId, PacketCodec.MUSIC_ACTION_STOP, "")
-                            dispatchRaw(stopPacket)
+                            dispatchMusicRaw(stopPacket)
                             onMusicCtrlReceived?.invoke(localId, PacketCodec.MUSIC_ACTION_STOP, "")
                         }
                         onClientLeft?.invoke(senderId)
@@ -436,20 +459,58 @@ class UdpAudioTransport(
                     }
                 }
             }
+        }
+    }
 
+    // ── Dedicated Music Receiving & Processing (Port 12348) ────────────
+
+    private fun startMusicReceiving() {
+        musicReceiveJob?.cancel()
+        musicReceiveJob = scope.launch(Dispatchers.IO) {
+            val recvBuffer = ByteArray(MAX_PACKET)
+            val packet = DatagramPacket(recvBuffer, recvBuffer.size)
+
+            while (isActive) {
+                try {
+                    val s = musicSocket ?: break
+                    s.receive(packet)
+                    processMusicIncoming(packet)
+                } catch (e: Exception) {
+                    if (isActive && musicSocket?.isClosed == false) {
+                        Log.w(TAG, "Music receive error: ${e.message}")
+                    }
+                }
+            }
+        }
+    }
+
+    private fun processMusicIncoming(packet: DatagramPacket) {
+        if (packet.length < 11) return
+
+        val data = packet.data
+        if (data[0] != PacketCodec.MAGIC_0 || data[1] != PacketCodec.MAGIC_1) return
+
+        val msgType = data[2]
+        val packetToken = data.copyOfRange(3, 7)
+        val senderId = String(data, 7, 4, Charsets.UTF_8).trimEnd('\u0000', ' ')
+        if (senderId == localId) return
+
+        if (!hasAdoptedToken && !isHost) return
+        if (!packetToken.contentEquals(sessionToken)) return
+
+        when (msgType) {
             PacketCodec.MSG_MUSIC_FRAME -> {
                 val parsed = PacketCodec.parseMusicFramePacket(data, packet.length)
                 if (parsed != null) {
                     if (isHost) {
+                        clientRegistry.get(senderId)?.musicPort = packet.port
                         val now = System.currentTimeMillis()
                         // Exclusive music relay: only relay frames from the current active DJ
                         if (currentMusicSenderId == null || currentMusicSenderId == senderId || (now - currentMusicSenderLastSeen > 5000L)) {
                             currentMusicSenderId = senderId
                             currentMusicSenderLastSeen = now
-                            relayToOthers(senderId, data, packet.length)
+                            relayMusicToOthers(senderId, data, packet.length)
                             onMusicFrameReceived?.invoke(parsed.senderId, parsed.pcm, parsed.sampleRate, parsed.sequence)
-                        } else {
-                            // Ignored: another rider is already sharing music exclusively
                         }
                     } else {
                         onMusicFrameReceived?.invoke(parsed.senderId, parsed.pcm, parsed.sampleRate, parsed.sequence)
@@ -461,6 +522,7 @@ class UdpAudioTransport(
                 val parsed = PacketCodec.parseMusicCtrlPacket(data, packet.length)
                 if (parsed != null) {
                     if (isHost) {
+                        clientRegistry.get(senderId)?.musicPort = packet.port
                         val now = System.currentTimeMillis()
                         when (parsed.action) {
                             PacketCodec.MUSIC_ACTION_PLAY -> {
@@ -485,7 +547,7 @@ class UdpAudioTransport(
                                 }
                             }
                         }
-                        relayToOthers(senderId, data, packet.length)
+                        relayMusicToOthers(senderId, data, packet.length)
                     }
                     onMusicCtrlReceived?.invoke(parsed.senderId, parsed.action, parsed.trackTitle)
                 }
@@ -504,7 +566,7 @@ class UdpAudioTransport(
                         currentMusicSenderId = null
                         currentMusicSenderLastSeen = 0L
                         val stopPacket = PacketCodec.buildMusicCtrlPacket(sessionToken, localId, PacketCodec.MUSIC_ACTION_STOP, "")
-                        dispatchRaw(stopPacket)
+                        dispatchMusicRaw(stopPacket)
                         onMusicCtrlReceived?.invoke(localId, PacketCodec.MUSIC_ACTION_STOP, "")
                     }
                     onClientLeft?.invoke(evictedId)
@@ -529,14 +591,27 @@ class UdpAudioTransport(
         dispatchRaw(rosterPacket)
     }
 
-    private fun relayToOthers(excludeId: String, data: ByteArray, length: Int) {
-        val sock = socket ?: return
+    private fun relayVoiceToOthers(excludeId: String, data: ByteArray, length: Int) {
+        val sock = voiceSocket ?: return
         clientRegistry.all().forEach { client ->
             if (client.id != excludeId) {
                 try {
                     sock.send(DatagramPacket(data, length, client.address))
                 } catch (e: Exception) {
-                    Log.w(TAG, "Relay to ${client.name} failed: ${e.message}")
+                    Log.w(TAG, "Voice relay to ${client.name} failed: ${e.message}")
+                }
+            }
+        }
+    }
+
+    private fun relayMusicToOthers(excludeId: String, data: ByteArray, length: Int) {
+        val sock = musicSocket ?: return
+        clientRegistry.all().forEach { client ->
+            if (client.id != excludeId) {
+                try {
+                    sock.send(DatagramPacket(data, length, client.address.address, client.musicPort))
+                } catch (e: Exception) {
+                    Log.w(TAG, "Music relay to ${client.name} failed: ${e.message}")
                 }
             }
         }
@@ -556,17 +631,17 @@ class UdpAudioTransport(
 
     private fun sendByeSync() {
         val raw = PacketCodec.buildByePacket(sessionToken, localId)
-        val sock = socket ?: return
+        val sock = voiceSocket ?: return
         hostAddress?.let { addr ->
             try {
-                sock.send(DatagramPacket(raw, raw.size, addr, AUDIO_PORT))
+                sock.send(DatagramPacket(raw, raw.size, addr, VOICE_PORT))
             } catch (_: Exception) {}
         }
     }
 
     private fun broadcastByeSync() {
         val raw = PacketCodec.buildByePacket(sessionToken, localId)
-        val sock = socket ?: return
+        val sock = voiceSocket ?: return
         clientRegistry.all().forEach { client ->
             try {
                 sock.send(DatagramPacket(raw, raw.size, client.address))
@@ -574,22 +649,45 @@ class UdpAudioTransport(
         }
     }
 
+    /** Dispatches voice and signaling packets through the voiceSocket (Port 12346) */
     private fun dispatchRaw(data: ByteArray) {
-        val sock = socket ?: return
+        val sock = voiceSocket ?: return
         if (isHost) {
             clientRegistry.all().forEach { client ->
                 try {
                     sock.send(DatagramPacket(data, data.size, client.address))
                 } catch (e: Exception) {
-                    Log.w(TAG, "Send to ${client.name} failed: ${e.message}")
+                    Log.w(TAG, "Voice send to ${client.name} failed: ${e.message}")
                 }
             }
         } else {
             hostAddress?.let { addr ->
                 try {
-                    sock.send(DatagramPacket(data, data.size, addr, AUDIO_PORT))
+                    sock.send(DatagramPacket(data, data.size, addr, VOICE_PORT))
                 } catch (e: Exception) {
-                    Log.w(TAG, "Send to host failed: ${e.message}")
+                    Log.w(TAG, "Voice send to host failed: ${e.message}")
+                }
+            }
+        }
+    }
+
+    /** Dispatches music packets exclusively through the musicSocket (Port 12348) */
+    private fun dispatchMusicRaw(data: ByteArray) {
+        val sock = musicSocket ?: return
+        if (isHost) {
+            clientRegistry.all().forEach { client ->
+                try {
+                    sock.send(DatagramPacket(data, data.size, client.address.address, client.musicPort))
+                } catch (e: Exception) {
+                    Log.w(TAG, "Music send to ${client.name} failed: ${e.message}")
+                }
+            }
+        } else {
+            hostAddress?.let { addr ->
+                try {
+                    sock.send(DatagramPacket(data, data.size, addr, MUSIC_PORT))
+                } catch (e: Exception) {
+                    Log.w(TAG, "Music send to host failed: ${e.message}")
                 }
             }
         }

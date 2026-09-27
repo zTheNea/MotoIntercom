@@ -17,6 +17,7 @@ class RemoteClient(
     var amplitude: Float = 0f,
     var isConnected: Boolean = true,
     var linkQuality: LinkQuality = LinkQuality.OPTIMA,
+    var musicPort: Int = 12348,
     var lastSeqNum: Long = -1L,
     var receivedPackets: Int = 0,
     var expectedPackets: Int = 0,
