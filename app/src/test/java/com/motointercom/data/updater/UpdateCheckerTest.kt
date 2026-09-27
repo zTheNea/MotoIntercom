@@ -13,6 +13,7 @@ class UpdateCheckerTest {
         assertTrue(UpdateChecker.isVersionNewer("1.1.0", "1.1.1"))
         assertTrue(UpdateChecker.isVersionNewer("1.1.1", "1.1.2"))
         assertTrue(UpdateChecker.isVersionNewer("1.1.2", "1.2.0"))
+        assertTrue(UpdateChecker.isVersionNewer("1.2.0", "1.2.1"))
         assertTrue(UpdateChecker.isVersionNewer("1.0.0", "2.0.0"))
         assertTrue(UpdateChecker.isVersionNewer("v1.0.0", "v1.0.1"))
         assertTrue(UpdateChecker.isVersionNewer("1.0.0", "v1.0.1"))
