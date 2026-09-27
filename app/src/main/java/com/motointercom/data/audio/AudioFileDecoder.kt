@@ -62,8 +62,16 @@ class AudioFileDecoder(
             }
 
             extractor!!.selectTrack(audioTrackIndex)
-            sourceSampleRate = audioFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE, 44100)
-            sourceChannels = audioFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT, 2)
+            sourceSampleRate = if (audioFormat.containsKey(MediaFormat.KEY_SAMPLE_RATE)) {
+                audioFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+            } else {
+                44100
+            }
+            sourceChannels = if (audioFormat.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) {
+                audioFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+            } else {
+                2
+            }
 
             val mime = audioFormat.getString(MediaFormat.KEY_MIME)!!
             codec = MediaCodec.createDecoderByType(mime).apply {

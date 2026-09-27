@@ -11,6 +11,7 @@ import com.motointercom.data.wifi.SessionDiscovery
 import com.motointercom.domain.model.Session
 import com.motointercom.domain.model.SessionRole
 import com.motointercom.domain.model.SessionState
+import com.motointercom.data.preferences.PreferencesRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import com.motointercom.data.updater.UpdateChecker
@@ -23,8 +24,12 @@ import kotlinx.coroutines.launch
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
-    application: Application
+    application: Application,
+    preferencesRepository: PreferencesRepository? = null
 ) : AndroidViewModel(application) {
+
+    private val prefs = preferencesRepository ?: PreferencesRepository(application)
+    val savedRiderName: String get() = prefs.riderName
 
     private val _session = MutableStateFlow(Session())
     val session: StateFlow<Session> = _session.asStateFlow()
@@ -75,6 +80,10 @@ class HomeViewModel @Inject constructor(
     fun createSession(riderName: String) {
         if (_session.value.state != SessionState.IDLE) return
 
+        if (riderName.isNotBlank()) {
+            prefs.riderName = riderName.trim()
+        }
+
         _session.update { it.copy(state = SessionState.CREATING, localRiderName = riderName) }
 
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
@@ -107,6 +116,9 @@ class HomeViewModel @Inject constructor(
         if (hostIp.isBlank()) {
             _errorMessage.value = "Ingresa la IP del anfitrión"
             return
+        }
+        if (riderName.isNotBlank()) {
+            prefs.riderName = riderName.trim()
         }
         discovery.stopListening()
         _session.update {

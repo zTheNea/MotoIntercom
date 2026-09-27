@@ -301,7 +301,7 @@ class AudioRouteManager(private val context: Context) {
             val speaker = commDevices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
             if (speaker != null) {
                 val ok = audioManager.setCommunicationDevice(speaker)
-                Log.d(TAG, "✓ Route Modern: Speaker set -> $ok")
+                Log.d(TAG, "Route Modern: Speaker set -> $ok")
             }
             _isSpeakerActive.value = true
             _currentRouteName.value = "Altavoz"
@@ -331,7 +331,7 @@ class AudioRouteManager(private val context: Context) {
                     target.type in listOf(AudioDeviceInfo.TYPE_BLUETOOTH_SCO, TYPE_BLE_HEADSET_INT) -> "Casco BT / Auriculares"
                     else -> "Auriculares con cable"
                 }
-                Log.d(TAG, "✓ Route Modern: ${target.productName} (type=${target.type}, success=$ok)")
+                Log.d(TAG, "Route Modern: ${target.productName} (type=${target.type}, success=$ok)")
             } else {
                 audioManager.clearCommunicationDevice()
                 _isSpeakerActive.value = false
@@ -346,28 +346,28 @@ class AudioRouteManager(private val context: Context) {
             audioManager.isSpeakerphoneOn = true
             _isSpeakerActive.value = true
             _currentRouteName.value = "Altavoz"
-            Log.d(TAG, "✓ Route Legacy: Speakerphone = true")
+            Log.d(TAG, "Route Legacy: Speakerphone = true")
         } else {
             if (btDevice != null || hasConnectedBluetoothHeadset()) {
                 audioManager.isSpeakerphoneOn = false
                 startScoLegacy()
                 _isSpeakerActive.value = false
                 _currentRouteName.value = "Casco BT / Auriculares"
-                Log.d(TAG, "✓ Route Legacy: Bluetooth SCO started")
+                Log.d(TAG, "Route Legacy: Bluetooth SCO started")
             } else if (wiredDevice != null) {
                 stopScoLegacy()
                 // In Android, isSpeakerphoneOn = false automatically routes communication audio to wired headset
                 audioManager.isSpeakerphoneOn = false
                 _isSpeakerActive.value = false
                 _currentRouteName.value = "Auriculares con cable"
-                Log.d(TAG, "✓ Route Legacy: Wired Headset active (isSpeakerphoneOn = false)")
+                Log.d(TAG, "Route Legacy: Wired Headset active (isSpeakerphoneOn = false)")
             } else {
                 // Fallback to speaker if no headset found
                 stopScoLegacy()
                 audioManager.isSpeakerphoneOn = true
                 _isSpeakerActive.value = true
                 _currentRouteName.value = "Altavoz"
-                Log.d(TAG, "✓ Route Legacy: Fallback to speakerphone")
+                Log.d(TAG, "Route Legacy: Fallback to speakerphone")
             }
         }
     }

@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -10,23 +12,34 @@ android {
     namespace = "com.motointercom"
     compileSdk = 35
 
+    // Load signing credentials from local.properties (gitignored)
+    val localProps = Properties().apply {
+        val f = rootProject.file("local.properties")
+        if (f.exists()) {
+            f.inputStream().use { stream ->
+                load(stream)
+            }
+        }
+    }
+
     defaultConfig {
         applicationId = "com.motointercom"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.1.1"
+        versionCode = 4
+        versionName = "1.1.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
         create("release") {
-            storeFile = file("release.jks")
-            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "motointercom123"
-            keyAlias = System.getenv("KEY_ALIAS") ?: "motointercom"
-            keyPassword = System.getenv("KEY_PASSWORD") ?: "motointercom123"
+            storeFile = file(System.getenv("KEYSTORE_FILE") ?: localProps.getProperty("KEYSTORE_FILE", "release.jks"))
+            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: localProps.getProperty("KEYSTORE_PASSWORD")
+            keyAlias = System.getenv("KEY_ALIAS") ?: localProps.getProperty("KEY_ALIAS")
+            keyPassword = System.getenv("KEY_PASSWORD") ?: localProps.getProperty("KEY_PASSWORD")
         }
     }
+
 
     buildTypes {
         release {

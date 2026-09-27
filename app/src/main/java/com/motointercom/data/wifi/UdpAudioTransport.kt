@@ -18,6 +18,7 @@ import java.net.DatagramSocket
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
+import java.util.concurrent.atomic.AtomicInteger
 import javax.crypto.SecretKey
 
 /**
@@ -53,8 +54,8 @@ class UdpAudioTransport(
     private var hostAddress: InetAddress? = null
     private var cachedHostIp: String = ""
     val localId: String = PacketCodec.buildLocalId()
-    private var sequence: Int = 0
-    private var musicSequence: Int = 0
+    private val sequence = AtomicInteger(0)
+    private val musicSequence = AtomicInteger(0)
 
     // ── Callbacks ────────────────────────────────────────────────────────
 
@@ -69,8 +70,8 @@ class UdpAudioTransport(
 
     // ── Lifecycle ────────────────────────────────────────────────────────
 
-    fun startHost() {
-        try {
+    fun startHost(): Boolean {
+        return try {
             stop(notifyPeers = false)
             socket = DatagramSocket(null).apply {
                 reuseAddress = true
@@ -80,8 +81,10 @@ class UdpAudioTransport(
             Log.d(TAG, "HOST UDP socket active on :$AUDIO_PORT | localId=$localId | name=$localRiderName")
             startReceiving()
             startHostSweepAndRosterJob()
+            true
         } catch (e: Exception) {
             Log.e(TAG, "Error starting host socket", e)
+            false
         }
     }
 
@@ -92,8 +95,8 @@ class UdpAudioTransport(
         }
     }
 
-    fun startClient(hostIp: String) {
-        try {
+    fun startClient(hostIp: String): Boolean {
+        return try {
             stop(notifyPeers = false)
             cachedHostIp = hostIp
             socket = DatagramSocket(null).apply {
@@ -134,8 +137,10 @@ class UdpAudioTransport(
                     if (!keepRunning) break
                 }
             }
+            true
         } catch (e: Exception) {
             Log.e(TAG, "Error starting client socket", e)
+            false
         }
     }
 
@@ -164,7 +169,7 @@ class UdpAudioTransport(
     fun sendAudio(pcm: ByteArray, amplitude: Float = 0f) {
         scope.launch(Dispatchers.IO) {
             val packet = PacketCodec.buildAudioPacket(
-                sequence = sequence++,
+                sequence = sequence.getAndIncrement(),
                 sessionToken = sessionToken,
                 localId = localId,
                 pcm = pcm,
@@ -176,11 +181,7 @@ class UdpAudioTransport(
     }
 
     fun sendMusicFrame(pcm: ByteArray, sampleRate: Int = 16000) {
-        val seq = synchronized(this) {
-            val s = musicSequence
-            musicSequence = (musicSequence + 1) and 0xFFFF
-            s
-        }
+        val seq = musicSequence.getAndIncrement() and 0xFFFF
         scope.launch(Dispatchers.IO) {
             val packet = PacketCodec.buildMusicFramePacket(
                 sequence = seq,

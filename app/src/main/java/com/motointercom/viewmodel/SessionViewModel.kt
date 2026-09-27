@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.IBinder
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.motointercom.data.preferences.PreferencesRepository
 import com.motointercom.domain.model.ReconnectionState
 import com.motointercom.domain.model.Rider
 import com.motointercom.domain.model.Session
@@ -29,19 +30,33 @@ import kotlinx.coroutines.launch
  */
 @HiltViewModel
 class SessionViewModel @Inject constructor(
-    application: Application
+    application: Application,
+    preferencesRepository: PreferencesRepository? = null
 ) : AndroidViewModel(application) {
 
+    private val prefs = preferencesRepository ?: PreferencesRepository(application)
+
+    private val _uiState = MutableStateFlow(
+        SessionUiState(
+            isVox = prefs.isVoxEnabled,
+            isSpeaker = prefs.isSpeakerOn,
+            musicVolume = prefs.musicVolume,
+            isMultitasking = prefs.isMultitasking
+        )
+    )
+    val uiState: StateFlow<SessionUiState> = _uiState.asStateFlow()
+
+    // Backwards-compatible individual StateFlows
     private val _isMuted    = MutableStateFlow(false)
     val isMuted: StateFlow<Boolean> = _isMuted.asStateFlow()
 
     private val _isPttActive = MutableStateFlow(false)
     val isPttActive: StateFlow<Boolean> = _isPttActive.asStateFlow()
 
-    private val _isVox      = MutableStateFlow(false)
+    private val _isVox      = MutableStateFlow(prefs.isVoxEnabled)
     val isVox: StateFlow<Boolean> = _isVox.asStateFlow()
 
-    private val _isSpeaker  = MutableStateFlow(false)
+    private val _isSpeaker  = MutableStateFlow(prefs.isSpeakerOn)
     val isSpeaker: StateFlow<Boolean> = _isSpeaker.asStateFlow()
 
     private val _amplitude  = MutableStateFlow(0f)
@@ -71,10 +86,10 @@ class SessionViewModel @Inject constructor(
     private val _musicSharerName = MutableStateFlow<String?>(null)
     val musicSharerName: StateFlow<String?> = _musicSharerName.asStateFlow()
 
-    private val _musicVolume = MutableStateFlow(0.85f)
+    private val _musicVolume = MutableStateFlow(prefs.musicVolume)
     val musicVolume: StateFlow<Float> = _musicVolume.asStateFlow()
 
-    private val _isMultitasking = MutableStateFlow(true)
+    private val _isMultitasking = MutableStateFlow(prefs.isMultitasking)
     val isMultitasking: StateFlow<Boolean> = _isMultitasking.asStateFlow()
 
     private val _isSystemAudioActive = MutableStateFlow(false)
@@ -88,23 +103,33 @@ class SessionViewModel @Inject constructor(
             service = localService
             localService.resetTermination()
             _sessionTerminated.value = false
+            _uiState.update { it.copy(sessionTerminated = false) }
+
+            // Restore user preferences into the service
+            localService.setVox(prefs.isVoxEnabled)
+            localService.setSpeaker(prefs.isSpeakerOn)
+            localService.setMusicVolume(prefs.musicVolume)
+            localService.setMultitasking(prefs.isMultitasking)
 
             // Sync amplitude from service
             viewModelScope.launch {
                 localService.amplitude.collectLatest { amp ->
                     _amplitude.value = amp
+                    _uiState.update { it.copy(amplitude = amp) }
                 }
             }
             // Sync dynamic rider count from service
             viewModelScope.launch {
                 localService.connectedClients.collectLatest { count ->
                     _connectedCount.value = count
+                    _uiState.update { it.copy(connectedCount = count) }
                 }
             }
             // Sync remote riders roster from service
             viewModelScope.launch {
                 localService.riders.collectLatest { list ->
                     _riders.value = list
+                    _uiState.update { it.copy(riders = list) }
                 }
             }
             // Sync session termination from service
@@ -112,6 +137,7 @@ class SessionViewModel @Inject constructor(
                 localService.sessionTerminated.collectLatest { terminated ->
                     if (terminated) {
                         _sessionTerminated.value = true
+                        _uiState.update { it.copy(sessionTerminated = true) }
                     }
                 }
             }
@@ -119,54 +145,63 @@ class SessionViewModel @Inject constructor(
             viewModelScope.launch {
                 localService.reconnectionState.collectLatest { state ->
                     _reconnectionState.value = state
+                    _uiState.update { it.copy(reconnectionState = state) }
                 }
             }
             // Sync speaker vs headset routing state from service
             viewModelScope.launch {
                 localService.isSpeakerActive.collectLatest { speakerOn ->
                     _isSpeaker.value = speakerOn
+                    _uiState.update { it.copy(isSpeaker = speakerOn) }
                 }
             }
             // Sync music track title from service
             viewModelScope.launch {
                 localService.musicTrack.collectLatest { track ->
                     _musicTrack.value = track
+                    _uiState.update { it.copy(musicTrack = track) }
                 }
             }
             // Sync music playback state from service
             viewModelScope.launch {
                 localService.isMusicPlaying.collectLatest { playing ->
                     _isMusicPlaying.value = playing
+                    _uiState.update { it.copy(isMusicPlaying = playing) }
                 }
             }
             // Sync music host state from service
             viewModelScope.launch {
                 localService.isMusicHost.collectLatest { host ->
                     _isMusicHost.value = host
+                    _uiState.update { it.copy(isMusicHost = host) }
                 }
             }
             // Sync music sharer name from service
             viewModelScope.launch {
                 localService.musicSharerName.collectLatest { sharer ->
                     _musicSharerName.value = sharer
+                    _uiState.update { it.copy(musicSharerName = sharer) }
                 }
             }
             // Sync music volume from service
             viewModelScope.launch {
                 localService.musicVolume.collectLatest { vol ->
                     _musicVolume.value = vol
+                    _uiState.update { it.copy(musicVolume = vol) }
                 }
             }
             // Sync audio multitasking state from service
             viewModelScope.launch {
                 localService.isMultitaskingActive.collectLatest { multi ->
                     _isMultitasking.value = multi
+                    _uiState.update { it.copy(isMultitasking = multi) }
                 }
             }
             // Sync system audio sharing state from service
             viewModelScope.launch {
                 localService.isSystemAudioActive.collectLatest { active ->
                     _isSystemAudioActive.value = active
+                    _uiState.update { it.copy(isSystemAudioActive = active) }
                 }
             }
         }
@@ -178,6 +213,7 @@ class SessionViewModel @Inject constructor(
 
     fun startAndBind(session: Session) {
         _sessionTerminated.value = false
+        _uiState.update { it.copy(sessionTerminated = false) }
         val ctx = getApplication<Application>()
         val intent = Intent(ctx, IntercomService::class.java).apply {
             putExtra(IntercomService.EXTRA_ROLE, session.role)
@@ -202,27 +238,41 @@ class SessionViewModel @Inject constructor(
         _connectedCount.value = 1
         _sessionTerminated.value = false
         _reconnectionState.value = ReconnectionState()
+        _uiState.update {
+            it.copy(
+                riders = emptyList(),
+                connectedCount = 1,
+                sessionTerminated = false,
+                reconnectionState = ReconnectionState()
+            )
+        }
     }
 
     // ── Audio Controls ───────────────────────────────────────────────────
 
     fun setMuted(muted: Boolean) {
         _isMuted.value = muted
+        _uiState.update { it.copy(isMuted = muted) }
         service?.setMuted(muted)
     }
 
     fun setPttActive(active: Boolean) {
         _isPttActive.value = active
+        _uiState.update { it.copy(isPttActive = active) }
         service?.setPttActive(active)
     }
 
     fun setVox(enabled: Boolean) {
         _isVox.value = enabled
+        _uiState.update { it.copy(isVox = enabled) }
+        prefs.isVoxEnabled = enabled
         service?.setVox(enabled)
     }
 
     fun setSpeaker(on: Boolean) {
         _isSpeaker.value = on
+        _uiState.update { it.copy(isSpeaker = on) }
+        prefs.isSpeakerOn = on
         service?.setSpeaker(on)
     }
 
@@ -250,12 +300,16 @@ class SessionViewModel @Inject constructor(
 
     fun setMusicVolume(volume: Float) {
         _musicVolume.value = volume
+        _uiState.update { it.copy(musicVolume = volume) }
+        prefs.musicVolume = volume
         service?.setMusicVolume(volume)
     }
 
     fun toggleMultitasking() {
         val next = !_isMultitasking.value
         _isMultitasking.value = next
+        _uiState.update { it.copy(isMultitasking = next) }
+        prefs.isMultitasking = next
         service?.setMultitasking(next)
     }
 

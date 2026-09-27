@@ -1,5 +1,6 @@
 package com.motointercom.data.audio
 
+import android.annotation.SuppressLint
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
@@ -60,6 +61,7 @@ class AudioCapture(private val scope: CoroutineScope) {
     var voxEnabled = false
     private var voxHoldCounter = 0
 
+    @SuppressLint("MissingPermission")
     fun start() {
         if (isCapturing) return
 
@@ -87,19 +89,19 @@ class AudioCapture(private val scope: CoroutineScope) {
             if (AcousticEchoCanceler.isAvailable()) {
                 aec = AcousticEchoCanceler.create(sessionId)?.apply {
                     enabled = true
-                    Log.d(TAG, "✓ AEC enabled (echo cancellation)")
+                    Log.d(TAG, "AEC enabled (echo cancellation)")
                 }
             }
             if (NoiseSuppressor.isAvailable()) {
                 ns = NoiseSuppressor.create(sessionId)?.apply {
                     enabled = true
-                    Log.d(TAG, "✓ Noise Suppressor enabled")
+                    Log.d(TAG, "Noise Suppressor enabled")
                 }
             }
             if (AutomaticGainControl.isAvailable()) {
                 agc = AutomaticGainControl.create(sessionId)?.apply {
                     enabled = true
-                    Log.d(TAG, "✓ AGC enabled")
+                    Log.d(TAG, "AGC enabled")
                 }
             }
 

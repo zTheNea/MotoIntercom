@@ -37,6 +37,7 @@ fun NavGraph(navController: NavHostController) {
                 errorMessage = error,
                 discoveredSessions = discoveredSessions,
                 updateInfo = updateInfo,
+                initialRiderName = homeVm.savedRiderName,
                 onDismissUpdate = { homeVm.dismissUpdate() },
                 onCreateSession = { name -> homeVm.createSession(name) },
                 onJoinSession = { name, ip -> homeVm.joinSession(name, ip) },
@@ -56,25 +57,11 @@ fun NavGraph(navController: NavHostController) {
         composable(Routes.SESSION) {
             val session by homeVm.session.collectAsState()
             val localIp by homeVm.localIp.collectAsState()
-            val riders by sessionVm.riders.collectAsState()
-            val isMuted by sessionVm.isMuted.collectAsState()
-            val isPttActive by sessionVm.isPttActive.collectAsState()
-            val isVox by sessionVm.isVox.collectAsState()
-            val isSpeaker by sessionVm.isSpeaker.collectAsState()
-            val connectedCount by sessionVm.connectedCount.collectAsState()
-            val sessionTerminated by sessionVm.sessionTerminated.collectAsState()
-            val reconnectionState by sessionVm.reconnectionState.collectAsState()
-            val musicTrack by sessionVm.musicTrack.collectAsState()
-            val musicSharerName by sessionVm.musicSharerName.collectAsState()
-            val isMusicPlaying by sessionVm.isMusicPlaying.collectAsState()
-            val isMusicHost by sessionVm.isMusicHost.collectAsState()
-            val musicVolume by sessionVm.musicVolume.collectAsState()
-            val isMultitasking by sessionVm.isMultitasking.collectAsState()
-            val isSystemAudioActive by sessionVm.isSystemAudioActive.collectAsState()
+            val uiState by sessionVm.uiState.collectAsState()
 
-            LaunchedEffect(sessionTerminated) {
-                if (sessionTerminated) {
-                    val wasReconnecting = sessionVm.reconnectionState.value.attempt >= sessionVm.reconnectionState.value.maxAttempts
+            LaunchedEffect(uiState.sessionTerminated) {
+                if (uiState.sessionTerminated) {
+                    val wasReconnecting = uiState.reconnectionState.attempt >= uiState.reconnectionState.maxAttempts
                     sessionVm.stopAndUnbind()
                     homeVm.endSession()
                     if (wasReconnecting) {
@@ -87,25 +74,25 @@ fun NavGraph(navController: NavHostController) {
             SessionScreen(
                 session = session,
                 localIp = localIp,
-                riders = riders,
-                reconnectionState = reconnectionState,
-                isMuted = isMuted,
-                isPttActive = isPttActive,
-                isVox = isVox,
-                isSpeaker = isSpeaker,
-                connectedCount = connectedCount,
-                musicTrack = musicTrack,
-                musicSharerName = musicSharerName,
-                isMusicPlaying = isMusicPlaying,
-                isMusicHost = isMusicHost,
-                musicVolume = musicVolume,
-                isMultitasking = isMultitasking,
-                isSystemAudioActive = isSystemAudioActive,
-                onMuteToggle = { sessionVm.setMuted(!isMuted) },
+                riders = uiState.riders,
+                reconnectionState = uiState.reconnectionState,
+                isMuted = uiState.isMuted,
+                isPttActive = uiState.isPttActive,
+                isVox = uiState.isVox,
+                isSpeaker = uiState.isSpeaker,
+                connectedCount = uiState.connectedCount,
+                musicTrack = uiState.musicTrack,
+                musicSharerName = uiState.musicSharerName,
+                isMusicPlaying = uiState.isMusicPlaying,
+                isMusicHost = uiState.isMusicHost,
+                musicVolume = uiState.musicVolume,
+                isMultitasking = uiState.isMultitasking,
+                isSystemAudioActive = uiState.isSystemAudioActive,
+                onMuteToggle = { sessionVm.setMuted(!uiState.isMuted) },
                 onPttDown = { sessionVm.setPttActive(true) },
                 onPttUp = { sessionVm.setPttActive(false) },
-                onVoxToggle = { sessionVm.setVox(!isVox) },
-                onSpeakerToggle = { sessionVm.setSpeaker(!isSpeaker) },
+                onVoxToggle = { sessionVm.setVox(!uiState.isVox) },
+                onSpeakerToggle = { sessionVm.setSpeaker(!uiState.isSpeaker) },
                 onPlayDemoMusic = { sessionVm.playDemoMusic() },
                 onPlayUriMusic = { uri, title -> sessionVm.playUriMusic(uri, title) },
                 onStartSystemAudio = { resultCode, data -> sessionVm.startSystemAudioSharing(resultCode, data) },

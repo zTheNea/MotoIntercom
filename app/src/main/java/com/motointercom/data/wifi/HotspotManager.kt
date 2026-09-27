@@ -1,8 +1,10 @@
 package com.motointercom.data.wifi
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.net.wifi.WifiManager
 import android.os.Build
+import com.motointercom.R
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -54,6 +56,7 @@ class HotspotManager(private val context: Context) {
      * [onSuccess] is called on the main thread with the network credentials.
      * [onError] is called if the hotspot cannot be started.
      */
+    @SuppressLint("MissingPermission")
     fun start(onSuccess: (HotspotConfig) -> Unit, onError: (String) -> Unit) {
         if (_isActive.value) {
             _config.value?.let { onSuccess(it) }
@@ -71,7 +74,7 @@ class HotspotManager(private val context: Context) {
         }
 
         if (!isLocationEnabled) {
-            onError("⚠️ La Ubicación (GPS) está desactivada. Desliza la barra superior de tu teléfono y activa 'Ubicación' para crear el grupo.")
+            onError("La Ubicacion (GPS) esta desactivada. Desliza la barra superior de tu telefono y activa 'Ubicacion' para crear el grupo.")
             return
         }
 
@@ -100,7 +103,7 @@ class HotspotManager(private val context: Context) {
                         val cfg = HotspotConfig(ssid = ssid, passphrase = pass, hostIp = ip)
                         _config.value = cfg
                         _isActive.value = true
-                        Log.d(TAG, "Hotspot started ✓ SSID=$ssid | IP=$ip")
+                        Log.d(TAG, "Hotspot started: SSID=$ssid | IP=$ip")
                         onSuccess(cfg)
                     }
 
@@ -118,8 +121,8 @@ class HotspotManager(private val context: Context) {
                                 Log.i(TAG, "Regular tethering active, using existing hotspot network")
                                 val ip = detectHostIp()
                                 val cfg = HotspotConfig(
-                                    ssid = "Punto de Acceso del Teléfono",
-                                    passphrase = "(Tu contraseña de zona WiFi)",
+                                    ssid = context.getString(R.string.hotspot_default_ssid),
+                                    passphrase = context.getString(R.string.hotspot_default_passphrase),
                                     hostIp = ip
                                 )
                                 _config.value = cfg
@@ -128,13 +131,13 @@ class HotspotManager(private val context: Context) {
                                 return
                             }
                             WifiManager.LocalOnlyHotspotCallback.ERROR_NO_CHANNEL -> {
-                                onError("Sin canal WiFi disponible. Apaga y enciende el WiFi de tu teléfono.")
+                                onError(context.getString(R.string.hotspot_error_no_channel))
                             }
                             WifiManager.LocalOnlyHotspotCallback.ERROR_TETHERING_DISALLOWED -> {
-                                onError("El sistema no permite compartir conexión. Puedes activar manualmente tu 'Zona WiFi' en Ajustes.")
+                                onError(context.getString(R.string.hotspot_error_tethering_disallowed))
                             }
                             else -> {
-                                onError("Error al iniciar punto de acceso ($reason). Si persiste, activa manualmente tu 'Punto de Acceso' en Ajustes.")
+                                onError(context.getString(R.string.hotspot_error_generic, reason))
                             }
                         }
                     }
@@ -145,10 +148,10 @@ class HotspotManager(private val context: Context) {
             Log.e(TAG, "Exception starting hotspot", e)
             val msg = when {
                 e is SecurityException || e.message?.contains("nearby", ignoreCase = true) == true ->
-                    "⚠️ Falta el permiso 'Dispositivos Cercanos'. Ve a Ajustes > Apps > MotoIntercom > Permisos y actívalo."
+                    context.getString(R.string.hotspot_error_nearby_perm)
                 e.message?.contains("Location mode is not enabled", ignoreCase = true) == true ->
-                    "⚠️ La Ubicación (GPS) está desactivada. Actívala en la barra superior de tu teléfono."
-                else -> e.localizedMessage ?: "Error al iniciar punto de acceso"
+                    context.getString(R.string.hotspot_error_location_off)
+                else -> e.localizedMessage ?: context.getString(R.string.hotspot_error_generic_fallback)
             }
             onError(msg)
         }

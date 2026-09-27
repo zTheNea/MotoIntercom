@@ -19,6 +19,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import android.net.Uri
 import com.motointercom.MainActivity
+import com.motointercom.R
 import com.motointercom.data.audio.AudioCapture
 import com.motointercom.data.audio.AudioMixer
 import com.motointercom.data.audio.AudioPlayer
@@ -317,16 +318,22 @@ class IntercomService : Service() {
         // Automatically route to headset if connected (BT/wired/USB), otherwise loudspeaker
         audioRouteManager.startRouting()
 
-        if (role == SessionRole.HOST) {
-            transport?.startHost()
+        val started = if (role == SessionRole.HOST) {
+            val hostStarted = transport?.startHost() ?: false
             val effectiveIp = if (hostIp.isNotBlank()) hostIp else NetworkUtils.getLocalIpAddress(this)
             discovery = SessionDiscovery(this, serviceScope).apply {
                 startBroadcasting(riderName, effectiveIp) {
                     _connectedClients.value
                 }
             }
+            hostStarted
         } else {
-            transport?.startClient(hostIp)
+            transport?.startClient(hostIp) ?: false
+        }
+
+        if (!started) {
+            Log.e(TAG, "Failed to start UDP transport socket! Ending session.")
+            _sessionTerminated.value = true
         }
 
         // Wire microphone → transport
@@ -420,7 +427,7 @@ class IntercomService : Service() {
                 )?.apply {
                     setReferenceCounted(false)
                     acquire(4 * 60 * 60 * 1000L) // 4 hours safety timeout
-                    Log.d(TAG, "✓ Partial WakeLock acquired for ride")
+                    Log.d(TAG, "Partial WakeLock acquired for ride")
                 }
             }
         } catch (e: Exception) {
@@ -439,7 +446,7 @@ class IntercomService : Service() {
                 wifiLock = wifiManager?.createWifiLock(mode, "MotoIntercom:IntercomWifiLock")?.apply {
                     setReferenceCounted(false)
                     acquire()
-                    Log.d(TAG, "✓ Low-latency WifiLock acquired (mode=$mode)")
+                    Log.d(TAG, "Low-latency WifiLock acquired (mode=$mode)")
                 }
             }
         } catch (e: Exception) {
@@ -567,7 +574,9 @@ class IntercomService : Service() {
 
     fun stopSystemAudioSharing() {
         if (_isSystemAudioActive.value) {
-            systemAudioCapture?.stopCapture()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                systemAudioCapture?.stopCapture()
+            }
             _isSystemAudioActive.value = false
             _isMusicPlaying.value = false
             _musicTrack.value = null
@@ -649,10 +658,10 @@ class IntercomService : Service() {
     private fun createNotificationChannel() {
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "MotoIntercom",
+            getString(R.string.notif_channel_name),
             NotificationManager.IMPORTANCE_LOW
         ).apply {
-            description = "Intercomunicador de moto activo"
+            description = getString(R.string.notif_channel_desc)
             setShowBadge(false)
         }
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
@@ -673,15 +682,15 @@ class IntercomService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("MotoIntercom Activo")
-            .setContentText("Intercomunicador funcionando en segundo plano")
+            .setContentTitle(getString(R.string.notif_active_title))
+            .setContentText(getString(R.string.notif_active_text))
             .setSmallIcon(android.R.drawable.ic_menu_call)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .addAction(
                 android.R.drawable.ic_menu_close_clear_cancel,
-                "Finalizar Sesión",
+                getString(R.string.notif_stop_action),
                 stopPendingIntent
             )
             .build()

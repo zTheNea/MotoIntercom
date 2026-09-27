@@ -42,6 +42,7 @@ fun HomeScreen(
     errorMessage: String?,
     discoveredSessions: List<DiscoveredSession> = emptyList(),
     updateInfo: UpdateInfo? = null,
+    initialRiderName: String = "",
     onDismissUpdate: () -> Unit = {},
     onCreateSession: (name: String) -> Unit,
     onJoinSession: (name: String, ip: String) -> Unit,
@@ -53,8 +54,8 @@ fun HomeScreen(
         if (session.state == SessionState.ACTIVE) onNavigateToSession()
     }
 
-    var riderName by remember { mutableStateOf("") }
-    var activeTab by remember { mutableStateOf(0) }  // 0=crear, 1=unirse
+    var riderName by remember(initialRiderName) { mutableStateOf(initialRiderName) }
+    var activeTab by remember { mutableIntStateOf(0) }  // 0=crear, 1=unirse
 
     Box(
         modifier = Modifier
@@ -257,7 +258,7 @@ private fun TabSelector(activeTab: Int, onTabSelected: (Int) -> Unit) {
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        listOf("🏁  CREAR GRUPO", "📡  UNIRSE").forEachIndexed { index, label ->
+        listOf("CREAR GRUPO", "UNIRSE").forEachIndexed { index, label ->
             val isSelected = activeTab == index
             Box(
                 modifier = Modifier
@@ -318,9 +319,9 @@ private fun CreateSessionContent(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             listOf(
-                "🔴 Offline" to "Sin internet",
-                "📶 300m" to "Alcance WiFi",
-                "👥 4 Motos" to "Voz en vivo"
+                "Offline" to "Sin internet",
+                "300m" to "Alcance WiFi",
+                "4 Motos" to "Voz en vivo"
             ).forEach { (title, subtitle) ->
                 Column(
                     modifier = Modifier

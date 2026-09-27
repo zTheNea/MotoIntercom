@@ -15,11 +15,22 @@ import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 
+import com.motointercom.data.preferences.PreferencesRepository
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class HomeViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
     private lateinit var viewModel: HomeViewModel
+    private lateinit var fakePrefs: FakePreferencesRepository
+
+    class FakePreferencesRepository(context: Context) : PreferencesRepository(context) {
+        override var riderName: String = ""
+        override var isVoxEnabled: Boolean = false
+        override var isSpeakerOn: Boolean = false
+        override var musicVolume: Float = 0.85f
+        override var isMultitasking: Boolean = true
+    }
 
     @Before
     fun setUp() {
@@ -30,7 +41,8 @@ class HomeViewModelTest {
             override fun getSystemService(name: String): Any? = null
         }
 
-        viewModel = HomeViewModel(fakeApp)
+        fakePrefs = FakePreferencesRepository(fakeApp)
+        viewModel = HomeViewModel(fakeApp, fakePrefs)
     }
 
     @After
@@ -88,5 +100,12 @@ class HomeViewModelTest {
         // Should ignore createSession since state != IDLE
         viewModel.createSession("Carlos")
         assertEquals(SessionState.ACTIVE, viewModel.session.value.state)
+    }
+
+    @Test
+    fun `joinSession persists non-blank rider name to preferences`() {
+        viewModel.joinSession("Motorista77", "192.168.43.1")
+        assertEquals("Motorista77", fakePrefs.riderName)
+        assertEquals("Motorista77", viewModel.savedRiderName)
     }
 }
