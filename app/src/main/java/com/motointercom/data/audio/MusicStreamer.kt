@@ -3,7 +3,6 @@ package com.motointercom.data.audio
 import android.content.Context
 import android.net.Uri
 import android.util.Log
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,9 +15,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Pre-decodes audio ahead into a dedicated buffer and streams 20ms frames with
  * nanosecond-level hardware precision, completely eliminating timing jitter.
  */
-class MusicStreamer(
-    private val scope: CoroutineScope
-) {
+class MusicStreamer {
     companion object {
         private const val TAG = "MusicStreamer"
         const val FRAME_DURATION_MS = 20L

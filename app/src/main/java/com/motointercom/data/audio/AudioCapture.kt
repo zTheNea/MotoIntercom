@@ -54,6 +54,7 @@ class AudioCapture(private val scope: CoroutineScope) {
     /** Called with RMS amplitude 0.0–1.0 for UI meters */
     var onAmplitude: ((Float) -> Unit)? = null
 
+    @Volatile
     var isCapturing = false
         private set
 

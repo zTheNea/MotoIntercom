@@ -4,7 +4,7 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
 import android.util.Log
-import java.util.TreeMap
+
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
@@ -39,12 +39,13 @@ class GroupMusicPlayer {
     }
 
     private var audioTrack: AudioTrack? = null
+    @Volatile
     var isPlaying = false
         private set
 
     private val lock = ReentrantLock()
     private val condition = lock.newCondition()
-    private val frameMap = TreeMap<Int, ByteArray>()
+    private val frameMap = HashMap<Int, ByteArray>()
     private var nextPlaySequence = -1
     private var localSequenceCounter = 0
     private var isBuffering = true
@@ -60,6 +61,9 @@ class GroupMusicPlayer {
         private set
 
     private var currentFadeVolume = 0.85f
+
+    // Pre-allocated working buffer for volume processing (zero GC in hot path)
+    private var volumeWorkBuffer = ByteArray(BYTES_PER_FRAME)
 
     fun start() {
         if (isPlaying) return
@@ -111,7 +115,7 @@ class GroupMusicPlayer {
                             if (isBuffering) {
                                 if (frameMap.size >= PREBUFFER_TARGET_FRAMES) {
                                     isBuffering = false
-                                    nextPlaySequence = frameMap.firstKey()
+                                    nextPlaySequence = firstSequenceKey() ?: 0
                                 } else {
                                     try {
                                         condition.await(30, TimeUnit.MILLISECONDS)
@@ -152,9 +156,11 @@ class GroupMusicPlayer {
                                             nextPlaySequence = (nextPlaySequence + 1) and 0xFFFF
                                         } else if (frameMap.isNotEmpty()) {
                                             // Skip directly to next available packet without repeating old frames
-                                            val nextAvailable = frameMap.firstKey()
-                                            frameToWrite = frameMap.remove(nextAvailable)
-                                            nextPlaySequence = (nextAvailable + 1) and 0xFFFF
+                                            val nextAvailable = firstSequenceKey()
+                                            if (nextAvailable != null) {
+                                                frameToWrite = frameMap.remove(nextAvailable)
+                                                nextPlaySequence = (nextAvailable + 1) and 0xFFFF
+                                            }
                                         }
                                     }
                                 }
@@ -208,7 +214,7 @@ class GroupMusicPlayer {
 
             // Prune excess frames to keep strictly bounded latency (<160ms)
             while (frameMap.size > MAX_LATENCY_FRAMES) {
-                val oldest = frameMap.firstKey()
+                val oldest = firstSequenceKey() ?: break
                 frameMap.remove(oldest)
                 nextPlaySequence = (oldest + 1) and 0xFFFF
             }
@@ -235,18 +241,20 @@ class GroupMusicPlayer {
 
     fun stop() {
         isPlaying = false
+        // Signal the playback thread before interrupting so it exits cleanly
+        lock.withLock {
+            frameMap.clear()
+            nextPlaySequence = -1
+            isBuffering = true
+            condition.signalAll()
+        }
         playbackThread?.interrupt()
         playbackThread?.join(300)
         playbackThread = null
-        clear()
-        try {
-            audioTrack?.pause()
-            audioTrack?.flush()
-            audioTrack?.stop()
-            audioTrack?.release()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error stopping GroupMusicPlayer", e)
-        }
+        try { audioTrack?.pause() } catch (_: Exception) {}
+        try { audioTrack?.flush() } catch (_: Exception) {}
+        try { audioTrack?.stop() } catch (_: Exception) {}
+        try { audioTrack?.release() } catch (_: Exception) {}
         audioTrack = null
         Log.d(TAG, "GroupMusicPlayer stopped")
     }
@@ -255,6 +263,16 @@ class GroupMusicPlayer {
      * Smoothly scales PCM 16-bit little-endian samples according to ducking state,
      * applying per-sample linear interpolation to eliminate zipper noise and clicks.
      */
+    /**
+     * Finds the next sequence key closest ahead of [nextPlaySequence] in circular 16-bit space.
+     * Handles wrap-around from 65535 to 0 correctly.
+     */
+    private fun firstSequenceKey(): Int? {
+        if (frameMap.isEmpty()) return null
+        val ref = if (nextPlaySequence >= 0) nextPlaySequence else 0
+        return frameMap.keys.minByOrNull { ((it - ref) + 65536) % 65536 }
+    }
+
     private fun applySmoothVolume(chunk: ByteArray): ByteArray {
         val targetVolume = if (isDucked) masterVolume * DUCK_RATIO else masterVolume
         val startVol = currentFadeVolume
@@ -267,7 +285,10 @@ class GroupMusicPlayer {
         }
         currentFadeVolume = endVol
 
-        val out = ByteArray(chunk.size)
+        if (volumeWorkBuffer.size < chunk.size) {
+            volumeWorkBuffer = ByteArray(chunk.size)
+        }
+        val out = volumeWorkBuffer
         val numSamples = chunk.size / 2
         val step = if (numSamples > 1) (endVol - startVol) / (numSamples - 1) else 0f
 

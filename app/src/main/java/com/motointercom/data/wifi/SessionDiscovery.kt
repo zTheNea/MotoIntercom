@@ -38,6 +38,8 @@ class SessionDiscovery(
     private var listenJob: Job? = null
     private var probeJob: Job? = null
     private var cleanJob: Job? = null
+    private var broadcastSocket: DatagramSocket? = null
+    private var listenSocket: DatagramSocket? = null
     private var multicastLock: WifiManager.MulticastLock? = null
 
     private val _discoveredSessions = MutableStateFlow<List<DiscoveredSession>>(emptyList())
@@ -53,15 +55,16 @@ class SessionDiscovery(
      */
     fun startBroadcasting(hostName: String, hostIp: String, ridersCountProvider: () -> Int) {
         stopBroadcasting()
+        stopListening()
 
         broadcastJob = scope.launch(Dispatchers.IO) {
-            var socket: DatagramSocket? = null
             try {
-                socket = DatagramSocket(null).apply {
+                val socket = DatagramSocket(null).apply {
                     reuseAddress = true
                     bind(InetSocketAddress("0.0.0.0", DISCOVERY_PORT))
                     broadcast = true
                 }
+                broadcastSocket = socket
                 Log.d(TAG, "Host beacon broadcaster bound on port $DISCOVERY_PORT for $hostName @ $hostIp")
 
                 // Launch incoming probe listener job on the same socket
@@ -70,7 +73,7 @@ class SessionDiscovery(
                     while (isActive) {
                         try {
                             val packet = DatagramPacket(buffer, buffer.size)
-                            socket?.receive(packet)
+                            socket.receive(packet)
                             val text = String(packet.data, 0, packet.length, Charsets.UTF_8)
                             if (text.startsWith(PROBE_PREFIX)) {
                                 val count = ridersCountProvider()
@@ -79,7 +82,7 @@ class SessionDiscovery(
                                 // 1. Reply to DISCOVERY_PORT on the sender (for listeners on 12347)
                                 try {
                                     val replyPacket1 = DatagramPacket(replyPayload, replyPayload.size, packet.address, DISCOVERY_PORT)
-                                    socket?.send(replyPacket1)
+                                    socket.send(replyPacket1)
                                 } catch (e: Exception) {
                                     Log.w(TAG, "Reply to DISCOVERY_PORT failed: ${e.message}")
                                 }
@@ -88,7 +91,7 @@ class SessionDiscovery(
                                 if (packet.port != DISCOVERY_PORT) {
                                     try {
                                         val replyPacket2 = DatagramPacket(replyPayload, replyPayload.size, packet.address, packet.port)
-                                        socket?.send(replyPacket2)
+                                        socket.send(replyPacket2)
                                     } catch (e: Exception) {
                                         Log.w(TAG, "Reply to ephemeral port failed: ${e.message}")
                                     }
@@ -111,7 +114,7 @@ class SessionDiscovery(
                     for (target in targets) {
                         try {
                             val packet = DatagramPacket(payload, payload.size, target, DISCOVERY_PORT)
-                            socket?.send(packet)
+                            socket.send(packet)
                         } catch (e: Exception) {
                             // ENETUNREACH is normal for 255.255.255.255 without default route; ignore
                         }
@@ -123,7 +126,8 @@ class SessionDiscovery(
             } catch (e: Exception) {
                 Log.e(TAG, "Host beacon exception", e)
             } finally {
-                socket?.close()
+                try { broadcastSocket?.close() } catch (_: Exception) {}
+                broadcastSocket = null
             }
         }
     }
@@ -131,6 +135,8 @@ class SessionDiscovery(
     fun stopBroadcasting() {
         broadcastJob?.cancel()
         broadcastJob = null
+        try { broadcastSocket?.close() } catch (_: Exception) {}
+        broadcastSocket = null
         Log.d(TAG, "Beacon broadcast stopped")
     }
 
@@ -138,6 +144,7 @@ class SessionDiscovery(
      * Client: listen on DISCOVERY_PORT for active Host beacons and periodically send active probes.
      */
     fun startListening() {
+        stopBroadcasting()
         if (listenJob != null && listenJob?.isActive == true) return
 
         // Acquire Android MulticastLock so WiFi chip passes broadcast/multicast packets to the CPU
@@ -154,13 +161,13 @@ class SessionDiscovery(
 
         // Listener on fixed DISCOVERY_PORT
         listenJob = scope.launch(Dispatchers.IO) {
-            var socket: DatagramSocket? = null
             try {
-                socket = DatagramSocket(null).apply {
+                val socket = DatagramSocket(null).apply {
                     reuseAddress = true
                     bind(InetSocketAddress("0.0.0.0", DISCOVERY_PORT))
                     broadcast = true
                 }
+                listenSocket = socket
                 val buffer = ByteArray(512)
                 Log.d(TAG, "Client discovery listener active on port $DISCOVERY_PORT")
 
@@ -176,7 +183,8 @@ class SessionDiscovery(
             } catch (e: Exception) {
                 Log.e(TAG, "Client discovery listener exception", e)
             } finally {
-                socket?.close()
+                try { listenSocket?.close() } catch (_: Exception) {}
+                listenSocket = null
             }
         }
 
@@ -196,7 +204,7 @@ class SessionDiscovery(
                     while (isActive) {
                         try {
                             val p = DatagramPacket(buf, buf.size)
-                            probeSocket?.receive(p)
+                            probeSocket.receive(p)
                             handleIncomingPacket(p)
                         } catch (_: Exception) {
                             if (!isActive) break
@@ -282,6 +290,8 @@ class SessionDiscovery(
     fun stopListening() {
         listenJob?.cancel()
         listenJob = null
+        try { listenSocket?.close() } catch (_: Exception) {}
+        listenSocket = null
         probeJob?.cancel()
         probeJob = null
         cleanJob?.cancel()

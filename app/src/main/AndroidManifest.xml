@@ -42,7 +42,6 @@
 
     <!-- ═══════════════ SYSTEM ═══════════════ -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- ═══════════════ FEATURE DECLARATIONS ═══════════════ -->
     <uses-feature android:name="android.hardware.wifi" android:required="true" />

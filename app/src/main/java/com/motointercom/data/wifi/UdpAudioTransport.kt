@@ -46,6 +46,8 @@ class UdpAudioTransport(
     private var musicReceiveJob: Job? = null
     private var heartbeatJob: Job? = null
     private var sweepJob: Job? = null
+    private var voiceSendChannel: Channel<ByteArray>? = null
+    private var voiceSendJob: Job? = null
     private var musicSendChannel: Channel<ByteArray>? = null
     private var musicSendJob: Job? = null
 
@@ -93,6 +95,7 @@ class UdpAudioTransport(
             Log.d(TAG, "HOST sockets active: Voice on :$VOICE_PORT, Music on :$MUSIC_PORT | localId=$localId | name=$localRiderName")
             startVoiceReceiving()
             startMusicReceiving()
+            startVoiceSender()
             startMusicSender()
             startHostSweepAndRosterJob()
             true
@@ -132,6 +135,7 @@ class UdpAudioTransport(
 
             startVoiceReceiving()
             startMusicReceiving()
+            startVoiceSender()
             startMusicSender()
 
             reconnectionManager.reset()
@@ -192,16 +196,27 @@ class UdpAudioTransport(
     }
 
     fun sendAudio(pcm: ByteArray, amplitude: Float = 0f) {
-        scope.launch(Dispatchers.IO) {
-            val packet = PacketCodec.buildAudioPacket(
-                sequence = sequence.getAndIncrement(),
-                sessionToken = sessionToken,
-                localId = localId,
-                pcm = pcm,
-                amplitude = amplitude,
-                encryptionKey = encryptionKey
-            )
-            dispatchRaw(packet)
+        val packet = PacketCodec.buildAudioPacket(
+            sequence = sequence.getAndIncrement(),
+            sessionToken = sessionToken,
+            localId = localId,
+            pcm = pcm,
+            amplitude = amplitude,
+            encryptionKey = encryptionKey
+        )
+        voiceSendChannel?.trySend(packet)
+    }
+
+    private fun startVoiceSender() {
+        voiceSendJob?.cancel()
+        val channel = Channel<ByteArray>(Channel.UNLIMITED)
+        voiceSendChannel = channel
+        voiceSendJob = scope.launch(Dispatchers.IO) {
+            try {
+                for (packet in channel) {
+                    dispatchRaw(packet)
+                }
+            } catch (_: Exception) {}
         }
     }
 
@@ -258,6 +273,10 @@ class UdpAudioTransport(
         musicReceiveJob?.cancel()
         heartbeatJob?.cancel()
         sweepJob?.cancel()
+        voiceSendJob?.cancel()
+        voiceSendJob = null
+        voiceSendChannel?.close()
+        voiceSendChannel = null
         musicSendJob?.cancel()
         musicSendJob = null
         musicSendChannel?.close()

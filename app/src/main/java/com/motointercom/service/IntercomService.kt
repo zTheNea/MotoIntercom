@@ -152,7 +152,7 @@ class IntercomService : Service(), IntercomController {
         audioRouteManager = AudioRouteManager(this)
         audioRouteManager.initialize()
         musicPlayer = GroupMusicPlayer()
-        musicStreamer = MusicStreamer(serviceScope)
+        musicStreamer = MusicStreamer()
         createNotificationChannel()
         Log.d(TAG, "IntercomService created")
     }

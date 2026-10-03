@@ -38,8 +38,9 @@ class RemoteClient(
         receivedPackets += 1
 
         if (lastArrivalTime > 0) {
-            val transitDiff = abs(now - lastArrivalTime)
-            jitterMs += (transitDiff - jitterMs) / 16f
+            val interArrival = now - lastArrivalTime
+            val deviation = abs(interArrival - 20L).toFloat()
+            jitterMs += (deviation - jitterMs) / 16f
         }
         lastArrivalTime = now
 

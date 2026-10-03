@@ -12,14 +12,17 @@ import java.util.concurrent.ConcurrentHashMap
  */
 class AudioMixer {
 
+    companion object {
+        private val EMPTY_FRAME = ByteArray(0)
+    }
+
     // Active audio streams keyed by participant ID
     private val streams = ConcurrentHashMap<String, ShortArray>()
     // Reusable short buffers per participant to avoid per-frame allocations
     private val streamShortPool = ConcurrentHashMap<String, ShortArray>()
 
-    // Reusable mixing scratchpad buffers
+    // Reusable mixing scratchpad buffer for summing multi-talker shorts
     private var mixedShorts = ShortArray(AudioCapture.SAMPLES_PER_FRAME)
-    private var mixedBytes = ByteArray(AudioCapture.BYTES_PER_FRAME)
 
     /**
      * Submit a PCM frame from a participant.
@@ -45,7 +48,7 @@ class AudioMixer {
      * Mix all submitted streams, optionally excluding [excludeId].
      * Used by the HOST to send back mixed audio (excluding the original sender).
      *
-     * @return mixed PCM as ByteArray (little-endian 16-bit), or empty if no streams.
+     * @return mixed PCM as ByteArray (little-endian 16-bit), or empty singleton if no streams.
      */
     fun mix(excludeId: String? = null): ByteArray {
         val activeEntries = mutableListOf<ShortArray>()
@@ -58,21 +61,19 @@ class AudioMixer {
             }
         }
 
-        if (activeEntries.isEmpty()) return ByteArray(0)
+        if (activeEntries.isEmpty()) return EMPTY_FRAME
 
         // Optimization: single talker (most common scenario)
         if (activeEntries.size == 1) {
             val single = activeEntries[0]
             val neededBytes = single.size * 2
-            if (mixedBytes.size < neededBytes) {
-                mixedBytes = ByteArray(neededBytes)
-            }
+            val result = ByteArray(neededBytes)
             for (i in single.indices) {
                 val s = single[i].toInt()
-                mixedBytes[i * 2] = (s and 0xFF).toByte()
-                mixedBytes[i * 2 + 1] = ((s shr 8) and 0xFF).toByte()
+                result[i * 2] = (s and 0xFF).toByte()
+                result[i * 2 + 1] = ((s shr 8) and 0xFF).toByte()
             }
-            return mixedBytes.copyOf(neededBytes)
+            return result
         }
 
         // Multiple talkers: sum with saturation clipping
@@ -90,16 +91,14 @@ class AudioMixer {
         }
 
         val neededBytes = outputLen * 2
-        if (mixedBytes.size < neededBytes) {
-            mixedBytes = ByteArray(neededBytes)
-        }
+        val result = ByteArray(neededBytes)
         for (i in 0 until outputLen) {
             val s = mixedShorts[i].toInt()
-            mixedBytes[i * 2] = (s and 0xFF).toByte()
-            mixedBytes[i * 2 + 1] = ((s shr 8) and 0xFF).toByte()
+            result[i * 2] = (s and 0xFF).toByte()
+            result[i * 2 + 1] = ((s shr 8) and 0xFF).toByte()
         }
 
-        return mixedBytes.copyOf(neededBytes)
+        return result
     }
 
     fun removeStream(id: String) {

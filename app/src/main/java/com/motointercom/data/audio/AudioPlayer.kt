@@ -35,6 +35,7 @@ class AudioPlayer {
     }
 
     private var audioTrack: AudioTrack? = null
+    @Volatile
     var isPlaying = false
         private set
 
