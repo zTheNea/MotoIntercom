@@ -41,7 +41,7 @@ MotoIntercom es una aplicación Android de intercomunicación de voz en tiempo r
 - Arquitectura: MVVM + Corrutinas + StateFlow
 - Motor de Audio: Android AudioRecord y AudioTrack
 - Red: Datagramas UDP y descubrimiento por balizas locales
-- Compatibilidad: Android 7.0 (API 24) a Android 14 (API 34)
+- Compatibilidad: Android 8.0 (API 26) a Android 15 (API 35)
 
 ---
 
@@ -50,7 +50,7 @@ MotoIntercom es una aplicación Android de intercomunicación de voz en tiempo r
 ### Requisitos
 - Android Studio
 - JDK 17
-- Android SDK 34
+- Android SDK 35
 
 ### Comandos
 ```bash

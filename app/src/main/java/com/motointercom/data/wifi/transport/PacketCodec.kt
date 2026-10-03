@@ -94,6 +94,7 @@ object PacketCodec {
     const val MSG_MUSIC_FRAME: Byte = 6
     const val MSG_MUSIC_CTRL: Byte = 7
 
+    const val MUSIC_ACTION_PING: Byte = 0
     const val MUSIC_ACTION_PLAY: Byte = 1
     const val MUSIC_ACTION_PAUSE: Byte = 2
     const val MUSIC_ACTION_STOP: Byte = 3

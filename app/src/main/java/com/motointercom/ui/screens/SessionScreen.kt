@@ -1597,7 +1597,7 @@ private fun RainLockOverlay(
     LaunchedEffect(isHoldingUnlock) {
         if (isHoldingUnlock) {
             val startTime = System.currentTimeMillis()
-            val holdDuration = 1200L // 1.2s continuous intentional hold to reject raindrops
+            val holdDuration = 1500L // 1.5s continuous intentional hold to reject raindrops
             while (isHoldingUnlock) {
                 val elapsed = System.currentTimeMillis() - startTime
                 unlockProgress = (elapsed.toFloat() / holdDuration).coerceIn(0f, 1f)

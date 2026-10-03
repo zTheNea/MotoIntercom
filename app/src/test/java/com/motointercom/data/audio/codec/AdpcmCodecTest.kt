@@ -121,6 +121,58 @@ class AdpcmCodecTest {
         assertFalse(AdpcmCodec.isAdpcmFrame(wrongId))
     }
 
+    @Test
+    fun testStreamingEncoderContinuousSpeech() {
+        val encoder = AdpcmCodec.Encoder()
+        val frameCount = 5
+        val sampleRate = 16000
+        val freq = 440.0
+        val totalSamples = frameCount * AdpcmCodec.SAMPLES_PER_FRAME
+        val fullWave = ByteArray(totalSamples * 2)
+
+        for (i in 0 until totalSamples) {
+            val t = i.toDouble() / sampleRate
+            val sample = (sin(2.0 * Math.PI * freq * t) * 18000.0).toInt().coerceIn(-32768, 32767)
+            fullWave[i * 2] = (sample and 0xFF).toByte()
+            fullWave[i * 2 + 1] = ((sample shr 8) and 0xFF).toByte()
+        }
+
+        // Encode each frame sequentially with streaming encoder
+        var totalDiff = 0L
+        for (f in 0 until frameCount) {
+            val offset = f * AdpcmCodec.PCM_FRAME_BYTES
+            val adpcm = encoder.encode(fullWave, offset, AdpcmCodec.PCM_FRAME_BYTES)
+            assertEquals(AdpcmCodec.ADPCM_FRAME_BYTES, adpcm.size)
+            assertTrue(AdpcmCodec.isAdpcmFrame(adpcm))
+
+            // Decode independently (stateless per-packet decode)
+            val decoded = AdpcmCodec.decode(adpcm)
+            assertEquals(AdpcmCodec.PCM_FRAME_BYTES, decoded.size)
+
+            for (s in 0 until AdpcmCodec.SAMPLES_PER_FRAME) {
+                val origSample = ((fullWave[offset + s * 2].toInt() and 0xFF) or (fullWave[offset + s * 2 + 1].toInt() shl 8)).toShort().toInt()
+                val decSample = ((decoded[s * 2].toInt() and 0xFF) or (decoded[s * 2 + 1].toInt() shl 8)).toShort().toInt()
+                totalDiff += abs(origSample - decSample)
+            }
+        }
+
+        val avgDiff = totalDiff.toDouble() / totalSamples
+        assertTrue("Streaming encoder average error too high: $avgDiff", avgDiff < 600.0)
+    }
+
+    @Test
+    fun testStreamingEncoderReset() {
+        val encoder = AdpcmCodec.Encoder()
+        val pcm = generateSineWave(440.0, 16000, AdpcmCodec.SAMPLES_PER_FRAME)
+
+        val frame1 = encoder.encode(pcm)
+        encoder.reset()
+        val frameAfterReset = encoder.encode(pcm)
+
+        // After reset, re-encoding the same initial frame should produce identical bytes
+        assertTrue(frame1.contentEquals(frameAfterReset))
+    }
+
     private fun generateSineWave(freq: Double, sampleRate: Int, samplesCount: Int): ByteArray {
         val out = ByteArray(samplesCount * 2)
         val amplitude = 18000.0 // Moderate speech level

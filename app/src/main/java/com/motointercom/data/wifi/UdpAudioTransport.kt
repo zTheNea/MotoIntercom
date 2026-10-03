@@ -54,6 +54,7 @@ class UdpAudioTransport(
 
     private val clientRegistry = ClientRegistry()
     private val reconnectionManager = ReconnectionManager()
+    private val voiceEncoder = AdpcmCodec.Encoder()
     private var hasAdoptedToken: Boolean = isHost
 
     var currentMusicSenderId: String? = null
@@ -190,6 +191,7 @@ class UdpAudioTransport(
             }
             if (hasAdoptedToken) {
                 sendHeartbeat()
+                sendMusicPing()
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error in reconnect burst", e)
@@ -200,7 +202,7 @@ class UdpAudioTransport(
 
     fun sendAudio(pcm: ByteArray, amplitude: Float = 0f) {
         val payload = if (isCompressionEnabled && pcm.size == AdpcmCodec.PCM_FRAME_BYTES) {
-            AdpcmCodec.encode(pcm)
+            voiceEncoder.encode(pcm)
         } else {
             pcm
         }
@@ -265,6 +267,18 @@ class UdpAudioTransport(
         }
     }
 
+    fun sendMusicPing() {
+        if (!isHost) {
+            val packet = PacketCodec.buildMusicCtrlPacket(
+                sessionToken = sessionToken,
+                localId = localId,
+                action = PacketCodec.MUSIC_ACTION_PING,
+                trackTitle = ""
+            )
+            musicSendChannel?.trySend(packet)
+        }
+    }
+
     fun connectedClientCount(): Int = if (isHost) clientRegistry.count() + 1 else 1
 
     fun getRemoteRiders(): List<Rider> = clientRegistry.getRemoteRiders()
@@ -294,6 +308,7 @@ class UdpAudioTransport(
         musicSocket?.close()
         musicSocket = null
         clientRegistry.clear()
+        voiceEncoder.reset()
         Log.d(TAG, "UdpAudioTransport stopped (notifyPeers=$notifyPeers)")
     }
 
@@ -479,10 +494,14 @@ class UdpAudioTransport(
                 if (!isHost) {
                     val parsed = PacketCodec.parseRosterPacket(data, packet.length, localId)
                     if (parsed != null) {
+                        val isFirstAdoption = !hasAdoptedToken
                         if (!hasAdoptedToken || !sessionToken.contentEquals(parsed.sessionToken)) {
                             sessionToken = parsed.sessionToken
                             hasAdoptedToken = true
                             Log.d(TAG, "Client adopted session token from host")
+                            if (isFirstAdoption) {
+                                sendMusicPing()
+                            }
                         }
                         if (parsed.encryptionKey != null && (encryptionKey == null || !hasAdoptedToken)) {
                             encryptionKey = parsed.encryptionKey
@@ -556,6 +575,10 @@ class UdpAudioTransport(
                 if (parsed != null) {
                     if (isHost) {
                         clientRegistry.get(senderId)?.musicPort = packet.port
+                        if (parsed.action == PacketCodec.MUSIC_ACTION_PING) {
+                            Log.d(TAG, "Registered client $senderId music port=${packet.port} via ping")
+                            return
+                        }
                         val now = System.currentTimeMillis()
                         when (parsed.action) {
                             PacketCodec.MUSIC_ACTION_PLAY -> {

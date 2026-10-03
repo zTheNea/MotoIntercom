@@ -235,5 +235,25 @@ class PacketCodecTest {
         assertEquals(action, parsed?.action)
         assertEquals(title, parsed?.trackTitle)
     }
+
+    @Test
+    fun `buildMusicCtrlPacket with MUSIC_ACTION_PING parses correctly`() {
+        val packet = PacketCodec.buildMusicCtrlPacket(
+            sessionToken = testToken,
+            localId = localId,
+            action = PacketCodec.MUSIC_ACTION_PING,
+            trackTitle = ""
+        )
+
+        assertEquals(PacketCodec.MAGIC_0, packet[0])
+        assertEquals(PacketCodec.MAGIC_1, packet[1])
+        assertEquals(PacketCodec.MSG_MUSIC_CTRL, packet[2])
+
+        val parsed = PacketCodec.parseMusicCtrlPacket(packet, packet.size)
+        assertNotNull(parsed)
+        assertEquals(localId, parsed?.senderId)
+        assertEquals(PacketCodec.MUSIC_ACTION_PING, parsed?.action)
+        assertEquals("", parsed?.trackTitle)
+    }
 }
 

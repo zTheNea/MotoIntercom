@@ -1,7 +1,7 @@
 package com.motointercom.data.audio.codec
 
 /**
- * Ultra-low latency, zero-allocation IMA-ADPCM 4:1 Audio Codec.
+ * Ultra-low latency, zero-allocation IMA-ADPCM 4:1 Audio Codec (RFC 3551 standard framing).
  *
  * Compresses 16-bit linear PCM (16 kHz mono) into 4-bit ADPCM nibbles with an autonomous
  * per-packet header, achieving a 74.4% reduction in packet payload (640 bytes -> 164 bytes).
@@ -11,6 +11,8 @@ package com.motointercom.data.audio.codec
  *  - Zero-GC Hot Path: Reusable work buffers avoid garbage collector pressure.
  *  - Autonomous Packet Resilience: Each 164-byte frame contains its own initial predictor anchor
  *    and step index in the 4-byte header. Lost UDP packets do not corrupt subsequent packet decoding.
+ *  - Continuous Stream Adaptation: Uses [Encoder] to preserve predictor and step-size continuity
+ *    across 20ms frame boundaries, preventing slope-overload clicks.
  *  - Backward Compatibility: Provides helper methods to identify uncompressed vs ADPCM packets.
  */
 object AdpcmCodec {
@@ -50,8 +52,90 @@ object AdpcmCodec {
     }
 
     /**
-     * Encodes 640 bytes of 16-bit PCM (320 samples) into a 164-byte ADPCM packet.
-     * Thread-safe; returns a new ByteArray.
+     * Stateful streaming encoder that maintains predictor and step-size continuity
+     * across consecutive 20ms frames while writing the anchor state into each packet's header.
+     */
+    class Encoder {
+        private var currentPredictor: Int = 0
+        private var currentIndex: Int = 0
+        private var isFirstFrame: Boolean = true
+
+        fun encode(pcm: ByteArray, offset: Int = 0, length: Int = pcm.size - offset): ByteArray {
+            val out = ByteArray(ADPCM_FRAME_BYTES)
+            encode(pcm, offset, length, out, 0)
+            return out
+        }
+
+        fun encode(
+            pcm: ByteArray,
+            pcmOffset: Int,
+            pcmLength: Int,
+            out: ByteArray,
+            outOffset: Int
+        ): Int {
+            val sampleCount = (pcmLength / 2).coerceAtMost(SAMPLES_PER_FRAME)
+            if (sampleCount == 0) return 0
+
+            if (isFirstFrame) {
+                val low = pcm[pcmOffset].toInt() and 0xFF
+                val high = pcm[pcmOffset + 1].toInt() and 0xFF
+                currentPredictor = ((high shl 8) or low).toShort().toInt()
+                currentIndex = 0
+                isFirstFrame = false
+            }
+
+            // Write 4-byte header containing the anchor state at the start of this frame
+            out[outOffset] = (currentPredictor and 0xFF).toByte()
+            out[outOffset + 1] = ((currentPredictor shr 8) and 0xFF).toByte()
+            out[outOffset + 2] = (currentIndex and 0xFF).toByte()
+            out[outOffset + 3] = CODEC_IDENTIFIER
+
+            var pcmIdx = pcmOffset
+            var outIdx = outOffset + HEADER_BYTES
+
+            var i = 0
+            while (i < sampleCount) {
+                // Sample A
+                val lowA = pcm[pcmIdx].toInt() and 0xFF
+                val highA = pcm[pcmIdx + 1].toInt() and 0xFF
+                val sampleA = ((highA shl 8) or lowA).toShort().toInt()
+                pcmIdx += 2
+
+                val deltaA = encodeSample(sampleA, currentPredictor, currentIndex)
+                currentPredictor = updatePredictor(currentPredictor, deltaA, currentIndex)
+                currentIndex = updateIndex(currentIndex, deltaA)
+
+                // Sample B
+                val deltaB: Int
+                if (i + 1 < sampleCount) {
+                    val lowB = pcm[pcmIdx].toInt() and 0xFF
+                    val highB = pcm[pcmIdx + 1].toInt() and 0xFF
+                    val sampleB = ((highB shl 8) or lowB).toShort().toInt()
+                    pcmIdx += 2
+
+                    deltaB = encodeSample(sampleB, currentPredictor, currentIndex)
+                    currentPredictor = updatePredictor(currentPredictor, deltaB, currentIndex)
+                    currentIndex = updateIndex(currentIndex, deltaB)
+                } else {
+                    deltaB = 0
+                }
+
+                out[outIdx++] = ((deltaA and 0x0F) or ((deltaB and 0x0F) shl 4)).toByte()
+                i += 2
+            }
+
+            return ADPCM_FRAME_BYTES
+        }
+
+        fun reset() {
+            currentPredictor = 0
+            currentIndex = 0
+            isFirstFrame = true
+        }
+    }
+
+    /**
+     * One-shot encode helper (creates an autonomous packet).
      */
     fun encode(pcm: ByteArray, offset: Int = 0, length: Int = pcm.size - offset): ByteArray {
         val out = ByteArray(ADPCM_FRAME_BYTES)
@@ -60,8 +144,7 @@ object AdpcmCodec {
     }
 
     /**
-     * In-place zero-allocation encode.
-     * Writes exactly [ADPCM_FRAME_BYTES] into [out] at [outOffset].
+     * In-place one-shot encode.
      */
     fun encode(
         pcm: ByteArray,
@@ -73,17 +156,13 @@ object AdpcmCodec {
         val sampleCount = (pcmLength / 2).coerceAtMost(SAMPLES_PER_FRAME)
         if (sampleCount == 0) return 0
 
-        // Read initial sample for predictor anchor
-        val firstSample = ((pcm[pcmOffset].toInt() and 0xFF) or (pcm[pcmOffset + 1].toInt() shl 8)).toShort().toInt()
-        var predictor = firstSample
+        val low = pcm[pcmOffset].toInt() and 0xFF
+        val high = pcm[pcmOffset + 1].toInt() and 0xFF
+        var predictor = ((high shl 8) or low).toShort().toInt()
         var index = 0
 
-        // 4-byte Header:
-        // [0..1] Initial predictor sample (little-endian short)
-        // [2] Initial step index
-        // [3] Codec identifier flag (0x01)
-        out[outOffset] = (firstSample and 0xFF).toByte()
-        out[outOffset + 1] = ((firstSample shr 8) and 0xFF).toByte()
+        out[outOffset] = (predictor and 0xFF).toByte()
+        out[outOffset + 1] = ((predictor shr 8) and 0xFF).toByte()
         out[outOffset + 2] = (index and 0xFF).toByte()
         out[outOffset + 3] = CODEC_IDENTIFIER
 
@@ -92,22 +171,20 @@ object AdpcmCodec {
 
         var i = 0
         while (i < sampleCount) {
-            // Encode sample A
             val lowA = pcm[pcmIdx].toInt() and 0xFF
-            val highA = pcm[pcmIdx + 1].toInt()
-            val sampleA = (highA shl 8) or lowA
+            val highA = pcm[pcmIdx + 1].toInt() and 0xFF
+            val sampleA = ((highA shl 8) or lowA).toShort().toInt()
             pcmIdx += 2
 
             val deltaA = encodeSample(sampleA, predictor, index)
             predictor = updatePredictor(predictor, deltaA, index)
             index = updateIndex(index, deltaA)
 
-            // Encode sample B (or pad with 0 if odd number of samples)
             val deltaB: Int
             if (i + 1 < sampleCount) {
                 val lowB = pcm[pcmIdx].toInt() and 0xFF
-                val highB = pcm[pcmIdx + 1].toInt()
-                val sampleB = (highB shl 8) or lowB
+                val highB = pcm[pcmIdx + 1].toInt() and 0xFF
+                val sampleB = ((highB shl 8) or lowB).toShort().toInt()
                 pcmIdx += 2
 
                 deltaB = encodeSample(sampleB, predictor, index)
@@ -117,7 +194,6 @@ object AdpcmCodec {
                 deltaB = 0
             }
 
-            // Pack two 4-bit nibbles into one byte: low nibble = sample A, high nibble = sample B
             out[outIdx++] = ((deltaA and 0x0F) or ((deltaB and 0x0F) shl 4)).toByte()
             i += 2
         }
@@ -127,7 +203,7 @@ object AdpcmCodec {
 
     /**
      * Decodes a 164-byte ADPCM packet into 640 bytes of 16-bit PCM (320 samples).
-     * Thread-safe; returns a new ByteArray.
+     * Thread-safe and completely stateless because all necessary anchor state is in the packet header.
      */
     fun decode(adpcm: ByteArray, offset: Int = 0, length: Int = adpcm.size - offset): ByteArray {
         val out = ByteArray(PCM_FRAME_BYTES)
@@ -148,9 +224,8 @@ object AdpcmCodec {
     ): Int {
         if (adpcmLength < HEADER_BYTES) return 0
 
-        // Parse Header
         val lowPred = adpcm[adpcmOffset].toInt() and 0xFF
-        val highPred = adpcm[adpcmOffset + 1].toInt()
+        val highPred = adpcm[adpcmOffset + 1].toInt() and 0xFF
         var predictor = ((highPred shl 8) or lowPred).toShort().toInt()
         var index = (adpcm[adpcmOffset + 2].toInt() and 0xFF).coerceIn(0, 88)
 

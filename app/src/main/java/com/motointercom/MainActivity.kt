@@ -97,6 +97,16 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onResume() {
+        super.onResume()
+        val isGranted = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+        if (isGranted != permissionsGranted) {
+            permissionsGranted = isGranted
+        }
+    }
 }
 
 @Composable

@@ -8,6 +8,12 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
+/**
+ * Hilt DI Module providing singleton instances of audio processing utilities.
+ * Note: [com.motointercom.service.IntercomService] manages its own scoped instances
+ * directly tied to the foreground service lifecycle to guarantee clean state resets
+ * across sessions without lingering in process-wide singletons.
+ */
 @Module
 @InstallIn(SingletonComponent::class)
 object AudioModule {
