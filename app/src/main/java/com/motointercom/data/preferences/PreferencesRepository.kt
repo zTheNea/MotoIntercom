@@ -24,6 +24,7 @@ open class PreferencesRepository @Inject constructor(
         const val KEY_SPEAKER_ON = "speaker_on"
         const val KEY_MUSIC_VOLUME = "music_volume"
         const val KEY_MULTITASKING = "multitasking"
+        const val KEY_AUDIO_COMPRESSION = "audio_compression"
     }
 
     open var riderName: String
@@ -45,4 +46,8 @@ open class PreferencesRepository @Inject constructor(
     open var isMultitasking: Boolean
         get() = prefs.getBoolean(KEY_MULTITASKING, true)
         set(value) = prefs.edit().putBoolean(KEY_MULTITASKING, value).apply()
+
+    open var isAudioCompressionEnabled: Boolean
+        get() = prefs.getBoolean(KEY_AUDIO_COMPRESSION, true)
+        set(value) = prefs.edit().putBoolean(KEY_AUDIO_COMPRESSION, value).apply()
 }

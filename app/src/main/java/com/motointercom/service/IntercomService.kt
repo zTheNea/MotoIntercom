@@ -20,6 +20,7 @@ import androidx.core.app.ServiceCompat
 import android.net.Uri
 import com.motointercom.MainActivity
 import com.motointercom.R
+import com.motointercom.data.audio.codec.AdpcmCodec
 import com.motointercom.data.audio.AudioCapture
 import com.motointercom.data.audio.AudioMixer
 import com.motointercom.data.audio.AudioPlayer
@@ -28,6 +29,7 @@ import com.motointercom.data.audio.GroupMusicPlayer
 import com.motointercom.data.audio.MusicStreamer
 import com.motointercom.data.audio.SystemAudioCapture
 import com.motointercom.data.crypto.SessionCrypto
+import com.motointercom.data.preferences.PreferencesRepository
 import com.motointercom.data.wifi.NetworkUtils
 import com.motointercom.data.wifi.SessionDiscovery
 import com.motointercom.data.wifi.UdpAudioTransport
@@ -132,6 +134,9 @@ class IntercomService : Service(), IntercomController {
     val currentRouteName: StateFlow<String> get() = audioRouteManager.currentRouteName
     override val isMultitaskingActive: StateFlow<Boolean> get() = audioRouteManager.isMultitasking
 
+    private val _isCompressionActive = MutableStateFlow(true)
+    override val isCompressionActive: StateFlow<Boolean> = _isCompressionActive.asStateFlow()
+
     // ── Binder ───────────────────────────────────────────────────────────
 
     inner class LocalBinder : Binder() {
@@ -153,6 +158,7 @@ class IntercomService : Service(), IntercomController {
         audioRouteManager.initialize()
         musicPlayer = GroupMusicPlayer()
         musicStreamer = MusicStreamer()
+        _isCompressionActive.value = PreferencesRepository(this).isAudioCompressionEnabled
         createNotificationChannel()
         Log.d(TAG, "IntercomService created")
     }
@@ -230,6 +236,7 @@ class IntercomService : Service(), IntercomController {
             sessionToken = token,
             encryptionKey = encKey
         ).apply {
+            isCompressionEnabled = _isCompressionActive.value
             onAudioReceived = { senderId, pcm, amp ->
                 if (amp > 0.03f) notifyVoiceActivity()
                 mixer.submitFrame(senderId, pcm)
@@ -676,6 +683,13 @@ class IntercomService : Service(), IntercomController {
 
     override fun setSpeaker(on: Boolean) {
         audioRouteManager.setSpeaker(on)
+    }
+
+    override fun setCompression(enabled: Boolean) {
+        _isCompressionActive.value = enabled
+        transport?.isCompressionEnabled = enabled
+        PreferencesRepository(this).isAudioCompressionEnabled = enabled
+        Log.d(TAG, "Audio compression set to $enabled (ADPCM 4:1)")
     }
 
     // ── Notification ─────────────────────────────────────────────────────

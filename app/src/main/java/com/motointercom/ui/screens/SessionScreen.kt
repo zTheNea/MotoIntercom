@@ -65,6 +65,7 @@ fun SessionScreen(
     musicVolume: Float = 0.85f,
     isMultitasking: Boolean = true,
     isSystemAudioActive: Boolean = false,
+    isCompression: Boolean = true,
     onMuteToggle: () -> Unit,
     onPttDown: () -> Unit,
     onPttUp: () -> Unit,
@@ -78,6 +79,7 @@ fun SessionScreen(
     onStopMusic: () -> Unit = {},
     onSetMusicVolume: (Float) -> Unit = {},
     onToggleMultitasking: () -> Unit = {},
+    onToggleCompression: () -> Unit = {},
     onEndSession: () -> Unit
 ) {
     var showExitDialog by remember { mutableStateOf(false) }
@@ -406,6 +408,7 @@ fun SessionScreen(
                 musicVolume = musicVolume,
                 isMultitasking = isMultitasking,
                 isSystemAudioActive = isSystemAudioActive,
+                isCompression = isCompression,
                 onPlayDemo = onPlayDemoMusic,
                 onPickAudioFile = { audioPickerLauncher.launch("audio/*") },
                 onStartSystemAudio = {
@@ -420,6 +423,7 @@ fun SessionScreen(
                 onStopMusic = onStopMusic,
                 onVolumeChange = onSetMusicVolume,
                 onToggleMultitasking = onToggleMultitasking,
+                onToggleCompression = onToggleCompression,
                 onDismiss = { showMusicSheet = false }
             )
         }
@@ -1154,6 +1158,7 @@ private fun MusicDialog(
     musicVolume: Float,
     isMultitasking: Boolean,
     isSystemAudioActive: Boolean = false,
+    isCompression: Boolean = true,
     onPlayDemo: () -> Unit,
     onPickAudioFile: () -> Unit,
     onStartSystemAudio: () -> Unit = {},
@@ -1162,6 +1167,7 @@ private fun MusicDialog(
     onStopMusic: () -> Unit,
     onVolumeChange: (Float) -> Unit,
     onToggleMultitasking: () -> Unit,
+    onToggleCompression: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
     ModalBottomSheet(
@@ -1494,6 +1500,45 @@ private fun MusicDialog(
                 Switch(
                     checked = isMultitasking,
                     onCheckedChange = { onToggleMultitasking() },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = GreenActive,
+                        uncheckedTrackColor = BackgroundCard
+                    )
+                )
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            // Audio Compression Toggle (ADPCM 4:1)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(BackgroundElevated)
+                    .border(1.dp, if (isCompression) GreenActive.copy(alpha = 0.4f) else DividerColor, RoundedCornerShape(14.dp))
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Compresión de largo alcance WiFi",
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = TextPrimary
+                    )
+                    Text(
+                        "Comprime la voz un 75% (ADPCM 4:1) reduciendo el paquete a 164B para evitar cortes a máxima distancia entre motos.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                }
+
+                Spacer(Modifier.width(12.dp))
+
+                Switch(
+                    checked = isCompression,
+                    onCheckedChange = { onToggleCompression() },
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Color.White,
                         checkedTrackColor = GreenActive,

@@ -22,5 +22,6 @@ data class SessionUiState(
     val musicSharerName: String? = null,
     val musicVolume: Float = 0.85f,
     val isMultitasking: Boolean = true,
-    val isSystemAudioActive: Boolean = false
+    val isSystemAudioActive: Boolean = false,
+    val isCompression: Boolean = true
 )

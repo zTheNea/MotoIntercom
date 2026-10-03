@@ -26,11 +26,13 @@ interface IntercomController {
     val musicVolume: StateFlow<Float>
     val isSpeakerActive: StateFlow<Boolean>
     val isMultitaskingActive: StateFlow<Boolean>
+    val isCompressionActive: StateFlow<Boolean>
 
     fun setMuted(muted: Boolean)
     fun setPttActive(active: Boolean)
     fun setVox(enabled: Boolean)
     fun setSpeaker(on: Boolean)
+    fun setCompression(enabled: Boolean)
     fun playDemoMusic()
     fun playUriMusic(uri: Uri, title: String)
     fun pauseMusic()

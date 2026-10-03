@@ -28,6 +28,7 @@ class SessionViewModelTest {
         override var isSpeakerOn: Boolean = false
         override var musicVolume: Float = 0.85f
         override var isMultitasking: Boolean = true
+        override var isAudioCompressionEnabled: Boolean = true
     }
 
     @Before
@@ -57,6 +58,7 @@ class SessionViewModelTest {
         assertFalse(state.isSpeaker)
         assertEquals(0.85f, state.musicVolume, 0.001f)
         assertTrue(state.isMultitasking)
+        assertTrue(state.isCompression)
         assertEquals(1, state.connectedCount)
         assertTrue(state.riders.isEmpty())
         assertFalse(state.sessionTerminated)
@@ -128,6 +130,20 @@ class SessionViewModelTest {
         viewModel.toggleMultitasking()
         assertTrue(viewModel.uiState.value.isMultitasking)
         assertTrue(fakePrefs.isMultitasking)
+    }
+
+    @Test
+    fun `toggleCompression flips value in uiState and persists preference`() {
+        assertTrue(viewModel.uiState.value.isCompression)
+
+        viewModel.toggleCompression()
+        assertFalse(viewModel.uiState.value.isCompression)
+        assertFalse(viewModel.isCompression.value)
+        assertFalse(fakePrefs.isAudioCompressionEnabled)
+
+        viewModel.toggleCompression()
+        assertTrue(viewModel.uiState.value.isCompression)
+        assertTrue(fakePrefs.isAudioCompressionEnabled)
     }
 
     @Test

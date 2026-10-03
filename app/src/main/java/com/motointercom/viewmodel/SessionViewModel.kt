@@ -42,7 +42,8 @@ class SessionViewModel @Inject constructor(
             isVox = prefs.isVoxEnabled,
             isSpeaker = prefs.isSpeakerOn,
             musicVolume = prefs.musicVolume,
-            isMultitasking = prefs.isMultitasking
+            isMultitasking = prefs.isMultitasking,
+            isCompression = prefs.isAudioCompressionEnabled
         )
     )
     val uiState: StateFlow<SessionUiState> = _uiState.asStateFlow()
@@ -96,6 +97,9 @@ class SessionViewModel @Inject constructor(
     private val _isSystemAudioActive = MutableStateFlow(false)
     val isSystemAudioActive: StateFlow<Boolean> = _isSystemAudioActive.asStateFlow()
 
+    private val _isCompression = MutableStateFlow(prefs.isAudioCompressionEnabled)
+    val isCompression: StateFlow<Boolean> = _isCompression.asStateFlow()
+
     private var service: IntercomController? = null
 
     private val connection = object : ServiceConnection {
@@ -111,6 +115,7 @@ class SessionViewModel @Inject constructor(
             localService.setSpeaker(prefs.isSpeakerOn)
             localService.setMusicVolume(prefs.musicVolume)
             localService.setMultitasking(prefs.isMultitasking)
+            localService.setCompression(prefs.isAudioCompressionEnabled)
 
             // Sync amplitude from service
             viewModelScope.launch {
@@ -203,6 +208,13 @@ class SessionViewModel @Inject constructor(
                 localService.isSystemAudioActive.collectLatest { active ->
                     _isSystemAudioActive.value = active
                     _uiState.update { it.copy(isSystemAudioActive = active) }
+                }
+            }
+            // Sync audio compression state from service
+            viewModelScope.launch {
+                localService.isCompressionActive.collectLatest { comp ->
+                    _isCompression.value = comp
+                    _uiState.update { it.copy(isCompression = comp) }
                 }
             }
         }
@@ -312,6 +324,14 @@ class SessionViewModel @Inject constructor(
         _uiState.update { it.copy(isMultitasking = next) }
         prefs.isMultitasking = next
         service?.setMultitasking(next)
+    }
+
+    fun toggleCompression() {
+        val next = !_isCompression.value
+        _isCompression.value = next
+        _uiState.update { it.copy(isCompression = next) }
+        prefs.isAudioCompressionEnabled = next
+        service?.setCompression(next)
     }
 
     fun startSystemAudioSharing(resultCode: Int, data: Intent) {

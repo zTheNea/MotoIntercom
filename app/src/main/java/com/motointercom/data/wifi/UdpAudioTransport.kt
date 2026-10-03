@@ -1,6 +1,7 @@
 package com.motointercom.data.wifi
 
 import android.util.Log
+import com.motointercom.data.audio.codec.AdpcmCodec
 import com.motointercom.data.crypto.SessionCrypto
 import com.motointercom.data.wifi.transport.ClientRegistry
 import com.motointercom.data.wifi.transport.PacketCodec
@@ -195,12 +196,19 @@ class UdpAudioTransport(
         }
     }
 
+    var isCompressionEnabled: Boolean = true
+
     fun sendAudio(pcm: ByteArray, amplitude: Float = 0f) {
+        val payload = if (isCompressionEnabled && pcm.size == AdpcmCodec.PCM_FRAME_BYTES) {
+            AdpcmCodec.encode(pcm)
+        } else {
+            pcm
+        }
         val packet = PacketCodec.buildAudioPacket(
             sequence = sequence.getAndIncrement(),
             sessionToken = sessionToken,
             localId = localId,
-            pcm = pcm,
+            pcm = payload,
             amplitude = amplitude,
             encryptionKey = encryptionKey
         )
@@ -392,7 +400,7 @@ class UdpAudioTransport(
                     val amp = ampByte / 100f
 
                     if (pcmLen > 0 && pcmLen <= packet.length - 16) {
-                        val pcm = try {
+                        val payload = try {
                             if (encryptionKey != null) {
                                 SessionCrypto.decrypt(data, 16, pcmLen, encryptionKey!!)
                             } else {
@@ -403,6 +411,12 @@ class UdpAudioTransport(
                         } catch (e: Exception) {
                             Log.w(TAG, "Audio decryption failed from $senderId: ${e.message}")
                             return
+                        }
+
+                        val pcm = if (AdpcmCodec.isAdpcmFrame(payload)) {
+                            AdpcmCodec.decode(payload)
+                        } else {
+                            payload
                         }
 
                         if (isHost) {

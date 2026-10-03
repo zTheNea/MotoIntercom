@@ -88,6 +88,7 @@ fun NavGraph(navController: NavHostController) {
                 musicVolume = uiState.musicVolume,
                 isMultitasking = uiState.isMultitasking,
                 isSystemAudioActive = uiState.isSystemAudioActive,
+                isCompression = uiState.isCompression,
                 onMuteToggle = { sessionVm.setMuted(!uiState.isMuted) },
                 onPttDown = { sessionVm.setPttActive(true) },
                 onPttUp = { sessionVm.setPttActive(false) },
@@ -101,6 +102,7 @@ fun NavGraph(navController: NavHostController) {
                 onStopMusic = { sessionVm.stopMusic() },
                 onSetMusicVolume = { vol -> sessionVm.setMusicVolume(vol) },
                 onToggleMultitasking = { sessionVm.toggleMultitasking() },
+                onToggleCompression = { sessionVm.toggleCompression() },
                 onEndSession = {
                     sessionVm.stopAndUnbind()
                     homeVm.endSession()
