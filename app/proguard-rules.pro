@@ -1,15 +1,14 @@
 # Add project specific ProGuard rules here.
 # By default, the flags in this file are appended to flags specified
 # in the Android SDK proguard-android.txt
-# You can edit the include path and order by changing the proguardFiles
-# directive in build.gradle.
 
-# Keep model classes
+# Keep domain models
 -keep class com.motointercom.domain.model.** { *; }
--keep class com.motointercom.data.** { *; }
--keep class com.motointercom.service.** { *; }
 
-# Keep Bluetooth and audio classes
+# Keep Android Service components declared in Manifest
+-keep class com.motointercom.service.IntercomService { *; }
+
+# Keep Bluetooth and audio FX callbacks
 -keep class android.bluetooth.** { *; }
 -keep class android.media.audiofx.** { *; }
 

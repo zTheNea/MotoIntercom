@@ -11,6 +11,7 @@ import com.motointercom.domain.model.Rider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -56,6 +57,11 @@ class UdpAudioTransport(
     private val reconnectionManager = ReconnectionManager()
     private val voiceEncoder = AdpcmCodec.Encoder()
     private var hasAdoptedToken: Boolean = isHost
+
+    // Reusable buffers for zero-allocation compression, decompression, and decryption
+    private val adpcmSendBuffer = ByteArray(AdpcmCodec.ADPCM_FRAME_BYTES)
+    private val pcmDecodeBuffer = ByteArray(AdpcmCodec.PCM_FRAME_BYTES)
+    private val decryptWorkBuffer = ByteArray(MAX_PACKET)
 
     var currentMusicSenderId: String? = null
         private set
@@ -202,7 +208,8 @@ class UdpAudioTransport(
 
     fun sendAudio(pcm: ByteArray, amplitude: Float = 0f) {
         val payload = if (isCompressionEnabled && pcm.size == AdpcmCodec.PCM_FRAME_BYTES) {
-            voiceEncoder.encode(pcm)
+            voiceEncoder.encode(pcm, 0, pcm.size, adpcmSendBuffer, 0)
+            adpcmSendBuffer
         } else {
             pcm
         }
@@ -219,7 +226,10 @@ class UdpAudioTransport(
 
     private fun startVoiceSender() {
         voiceSendJob?.cancel()
-        val channel = Channel<ByteArray>(Channel.UNLIMITED)
+        val channel = Channel<ByteArray>(
+            capacity = 4,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST
+        )
         voiceSendChannel = channel
         voiceSendJob = scope.launch(Dispatchers.IO) {
             try {
@@ -232,7 +242,10 @@ class UdpAudioTransport(
 
     private fun startMusicSender() {
         musicSendJob?.cancel()
-        val channel = Channel<ByteArray>(Channel.UNLIMITED)
+        val channel = Channel<ByteArray>(
+            capacity = 6,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST
+        )
         musicSendChannel = channel
         musicSendJob = scope.launch(Dispatchers.IO) {
             try {
@@ -334,6 +347,12 @@ class UdpAudioTransport(
         }
     }
 
+    private fun isTokenMatching(data: ByteArray): Boolean {
+        if (sessionToken.size != 4 || data.size < 7) return false
+        return data[3] == sessionToken[0] && data[4] == sessionToken[1] &&
+                data[5] == sessionToken[2] && data[6] == sessionToken[3]
+    }
+
     private fun processVoiceIncoming(packet: DatagramPacket) {
         if (packet.length < 11) return
 
@@ -341,14 +360,13 @@ class UdpAudioTransport(
         if (data[0] != PacketCodec.MAGIC_0 || data[1] != PacketCodec.MAGIC_1) return
 
         val msgType = data[2]
-        val packetToken = data.copyOfRange(3, 7)
         val senderId = String(data, 7, 4, Charsets.UTF_8).trimEnd('\u0000', ' ')
         if (senderId == localId) return
 
         if (isHost) {
             // MSG_HELLO is an introduction from a new client who does not yet have the room's token.
-            // For all other packet types, enforce strict token matching.
-            if (msgType != PacketCodec.MSG_HELLO && !packetToken.contentEquals(sessionToken)) {
+            // For all other packet types, enforce strict token matching without array allocations.
+            if (msgType != PacketCodec.MSG_HELLO && !isTokenMatching(data)) {
                 Log.w(TAG, "Host rejected voice packet (type=$msgType) with invalid session token from ${packet.address.hostAddress}")
                 return
             }
@@ -359,7 +377,7 @@ class UdpAudioTransport(
 
             // Allow MSG_ROSTER through before token adoption so the client can acquire room credentials.
             if (hasAdoptedToken) {
-                if (!packetToken.contentEquals(sessionToken)) {
+                if (!isTokenMatching(data)) {
                     Log.w(TAG, "Client rejected voice packet (type=$msgType) with invalid session token from ${packet.address.hostAddress}")
                     return
                 }
@@ -415,23 +433,27 @@ class UdpAudioTransport(
                     val amp = ampByte / 100f
 
                     if (pcmLen > 0 && pcmLen <= packet.length - 16) {
-                        val payload = try {
+                        val (payloadData, payloadOffset, payloadLen) = try {
                             if (encryptionKey != null) {
-                                SessionCrypto.decrypt(data, 16, pcmLen, encryptionKey!!)
+                                val decLen = SessionCrypto.decrypt(
+                                    data, 16, pcmLen, decryptWorkBuffer, 0, encryptionKey!!
+                                )
+                                Triple(decryptWorkBuffer, 0, decLen)
                             } else {
-                                val raw = ByteArray(pcmLen)
-                                System.arraycopy(data, 16, raw, 0, pcmLen)
-                                raw
+                                Triple(data, 16, pcmLen)
                             }
                         } catch (e: Exception) {
                             Log.w(TAG, "Audio decryption failed from $senderId: ${e.message}")
                             return
                         }
 
-                        val pcm = if (AdpcmCodec.isAdpcmFrame(payload)) {
-                            AdpcmCodec.decode(payload)
+                        val pcm = if (AdpcmCodec.isAdpcmFrame(payloadData, payloadOffset, payloadLen)) {
+                            AdpcmCodec.decode(payloadData, payloadOffset, payloadLen, pcmDecodeBuffer, 0)
+                            pcmDecodeBuffer
                         } else {
-                            payload
+                            val raw = ByteArray(payloadLen)
+                            System.arraycopy(payloadData, payloadOffset, raw, 0, payloadLen)
+                            raw
                         }
 
                         if (isHost) {

@@ -1,0 +1,17 @@
+appId: com.motointercom
+---
+- launchApp:
+    clearState: false
+
+- assertVisible: "MOTO"
+- assertVisible: "INTERCOM"
+- assertVisible: "CREAR GRUPO"
+- assertVisible: "UNIRSE"
+
+# Tap Unirse tab
+- tapOn: "UNIRSE"
+- assertVisible: "Unirse a un Grupo"
+
+# Return to Crear tab
+- tapOn: "CREAR GRUPO"
+- assertVisible: "Crear Punto de Acceso"

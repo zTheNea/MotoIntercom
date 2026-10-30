@@ -105,4 +105,33 @@ class AudioMixerTest {
         mixer.clear()
         assertEquals(0, mixer.activeStreamCount())
     }
+
+    @Test
+    fun `in-place mix accurately sums samples into preallocated buffer`() {
+        val pcm1 = shortsToBytes(1000, 2000, -500)
+        val pcm2 = shortsToBytes(500, -1000, 200)
+
+        mixer.submitFrame("rider1", pcm1)
+        mixer.submitFrame("rider2", pcm2)
+
+        val outBuffer = ByteArray(640)
+        val bytesWritten = mixer.mix(outBuffer)
+
+        assertEquals(6, bytesWritten)
+        val expected = shortsToBytes(1500, 1000, -300)
+        val actual = outBuffer.copyOf(bytesWritten)
+        assertArrayEquals(expected, actual)
+    }
+
+    @Test
+    fun `in-place mix with single talker writes directly to destination buffer`() {
+        val pcm = shortsToBytes(100, 200, -300, 1500)
+        mixer.submitFrame("rider1", pcm)
+
+        val outBuffer = ByteArray(640)
+        val bytesWritten = mixer.mix(outBuffer)
+
+        assertEquals(pcm.size, bytesWritten)
+        assertArrayEquals(pcm, outBuffer.copyOf(bytesWritten))
+    }
 }

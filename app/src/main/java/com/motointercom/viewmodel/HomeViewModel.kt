@@ -14,13 +14,19 @@ import com.motointercom.domain.model.SessionState
 import com.motointercom.data.preferences.PreferencesRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import android.content.Context
+import com.motointercom.data.updater.ApkDownloader
 import com.motointercom.data.updater.UpdateChecker
+import com.motointercom.data.updater.UpdateDownloadProgress
 import com.motointercom.data.updater.UpdateInfo
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.File
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
@@ -58,6 +64,10 @@ class HomeViewModel @Inject constructor(
 
     private val _updateStatusMessage = MutableStateFlow<String?>(null)
     val updateStatusMessage: StateFlow<String?> = _updateStatusMessage.asStateFlow()
+
+    private val _downloadProgress = MutableStateFlow(UpdateDownloadProgress())
+    val downloadProgress: StateFlow<UpdateDownloadProgress> = _downloadProgress.asStateFlow()
+    private var downloadJob: Job? = null
 
     init {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -169,7 +179,93 @@ class HomeViewModel @Inject constructor(
     }
 
     fun dismissUpdate() {
+        cancelApkDownload()
         _updateInfo.value = null
+    }
+
+    fun startApkDownload(apkUrl: String, versionName: String) {
+        downloadJob?.cancel()
+        _downloadProgress.value = UpdateDownloadProgress(status = UpdateDownloadProgress.Status.DOWNLOADING)
+        downloadJob = viewModelScope.launch {
+            try {
+                val file = ApkDownloader.downloadApkStreaming(
+                    context = getApplication(),
+                    apkUrl = apkUrl,
+                    versionName = versionName
+                ) { downloaded, total ->
+                    val ratio = if (total > 0) (downloaded.toFloat() / total).coerceIn(0f, 1f) else 0f
+                    _downloadProgress.value = UpdateDownloadProgress(
+                        status = UpdateDownloadProgress.Status.DOWNLOADING,
+                        progress = ratio,
+                        downloadedBytes = downloaded,
+                        totalBytes = total
+                    )
+                }
+                val canInstall = ApkDownloader.canRequestPackageInstalls(getApplication())
+                _downloadProgress.value = UpdateDownloadProgress(
+                    status = UpdateDownloadProgress.Status.READY_TO_INSTALL,
+                    progress = 1f,
+                    downloadedBytes = file.length(),
+                    totalBytes = file.length(),
+                    apkPath = file.absolutePath,
+                    needsInstallPermission = !canInstall
+                )
+                if (canInstall) {
+                    installDownloadedApk()
+                }
+            } catch (e: Exception) {
+                if (e is CancellationException) {
+                    _downloadProgress.value = UpdateDownloadProgress(status = UpdateDownloadProgress.Status.IDLE)
+                } else {
+                    _downloadProgress.value = UpdateDownloadProgress(
+                        status = UpdateDownloadProgress.Status.ERROR,
+                        error = e.message ?: "Error desconocido durante la descarga."
+                    )
+                }
+            }
+        }
+    }
+
+    fun cancelApkDownload() {
+        downloadJob?.cancel()
+        downloadJob = null
+        _downloadProgress.value = UpdateDownloadProgress(status = UpdateDownloadProgress.Status.IDLE)
+    }
+
+    fun installDownloadedApk(context: Context = getApplication()) {
+        val path = _downloadProgress.value.apkPath ?: return
+        val file = File(path)
+        if (!file.exists()) {
+            _downloadProgress.value = UpdateDownloadProgress(
+                status = UpdateDownloadProgress.Status.ERROR,
+                error = "El archivo APK descargado no esta disponible."
+            )
+            return
+        }
+
+        if (!ApkDownloader.canRequestPackageInstalls(context)) {
+            _downloadProgress.value = _downloadProgress.value.copy(needsInstallPermission = true)
+            ApkDownloader.openUnknownSourcesSettings(context)
+        } else {
+            _downloadProgress.value = _downloadProgress.value.copy(needsInstallPermission = false)
+            val result = ApkDownloader.installApk(context, file)
+            result.onFailure { err ->
+                _downloadProgress.value = _downloadProgress.value.copy(
+                    status = UpdateDownloadProgress.Status.ERROR,
+                    error = "Fallo al iniciar el instalador: ${err.message}"
+                )
+            }
+        }
+    }
+
+    fun checkInstallPermissionOnResume(context: Context = getApplication()) {
+        if (_downloadProgress.value.status == UpdateDownloadProgress.Status.READY_TO_INSTALL) {
+            val canInstall = ApkDownloader.canRequestPackageInstalls(context)
+            _downloadProgress.value = _downloadProgress.value.copy(needsInstallPermission = !canInstall)
+            if (canInstall) {
+                installDownloadedApk(context)
+            }
+        }
     }
 
     fun clearUpdateStatusMessage() {

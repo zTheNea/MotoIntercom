@@ -1,0 +1,28 @@
+appId: com.motointercom
+---
+- launchApp:
+    clearState: false
+
+- assertVisible: "CREAR GRUPO"
+
+# Fill pilot name and create session
+- tapOn: "Tu nombre o apodo"
+- inputText: "Rider Test"
+- hideKeyboard
+
+- tapOn: "CREAR GRUPO"
+
+# Wait for SessionScreen to mount
+- extendedWaitUntil:
+    visible: "ANFITRIÓN"
+    timeout: 10000
+
+- assertVisible: "CANAL DE VOZ"
+- assertVisible: "Rider Test (Tú)"
+- assertVisible: "PTT"
+
+# Verify Audio Controls Bar
+- assertVisible: "Mic"
+- assertVisible: "VOX"
+- assertVisible: "Casco"
+- assertVisible: "Música"

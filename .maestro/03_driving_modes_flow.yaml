@@ -1,0 +1,27 @@
+appId: com.motointercom
+---
+- launchApp:
+    clearState: false
+
+# Ensure in session
+- extendedWaitUntil:
+    visible: "ANFITRIÓN"
+    timeout: 8000
+
+# Toggle Sun Mode
+- tapOn: "Modo Sol"
+
+# Toggle Rain Mode
+- tapOn: "Modo Lluvia"
+- assertVisible: "MODO LLUVIA ACTIVO"
+- assertVisible: "Pantalla blindada contra gotas de lluvia. PTT habilitado."
+
+# Unlock Rain Mode by holding the unlock button for 1.5 seconds
+- pressAndHold:
+    text: "MANTÉN 1.5s PARA DESBLOQUEAR"
+    duration: 1700
+
+# Confirm return to standard SessionScreen
+- extendedWaitUntil:
+    visible: "CANAL DE VOZ"
+    timeout: 3000

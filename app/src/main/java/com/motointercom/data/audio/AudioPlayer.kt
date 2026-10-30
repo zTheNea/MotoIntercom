@@ -40,6 +40,9 @@ class AudioPlayer {
         private set
 
     private val audioQueue = LinkedBlockingQueue<ByteArray>(QUEUE_CAPACITY)
+    private val bufferPool = java.util.concurrent.ArrayBlockingQueue<ByteArray>(QUEUE_CAPACITY).apply {
+        repeat(QUEUE_CAPACITY) { offer(ByteArray(AudioCapture.BYTES_PER_FRAME)) }
+    }
     private var playbackThread: Thread? = null
 
     // Pre-allocated PLC working buffer to prevent GC allocations in audio loop
@@ -96,6 +99,7 @@ class AudioPlayer {
                                 val firstChunk = audioQueue.poll(40, TimeUnit.MILLISECONDS)
                                 if (firstChunk != null) {
                                     writeFrame(firstChunk)
+                                    bufferPool.offer(firstChunk)
                                     isVoiceBurstActive = true
                                 }
                                 continue
@@ -107,6 +111,7 @@ class AudioPlayer {
                         if (chunk != null) {
                             plcConsecutiveCount = 0
                             writeFrame(chunk)
+                            bufferPool.offer(chunk)
                         } else {
                             // 3. UDP Packet Loss Concealment (PLC)
                             if (isVoiceBurstActive && plcConsecutiveCount < MAX_PLC_FRAMES && lastPlayedFrame != null) {
@@ -152,7 +157,7 @@ class AudioPlayer {
      * Generates a Packet Loss Concealment frame by applying a smooth decay factor
      * to the 16-bit PCM samples of the previous frame. Avoids phase discontinuity pops.
      */
-    private fun generatePlcFrame(source: ByteArray, fade: Float): ByteArray {
+    internal fun generatePlcFrame(source: ByteArray, fade: Float): ByteArray {
         if (plcWorkingBuffer == null || plcWorkingBuffer?.size != source.size) {
             plcWorkingBuffer = ByteArray(source.size)
         }
@@ -175,17 +180,23 @@ class AudioPlayer {
      * Non-blocking. If network burst exceeds MAX_LATENCY_FRAMES (120ms),
      * oldest frames are dropped to keep conversation strictly real-time.
      */
-    fun play(pcmData: ByteArray) {
-        if (!isPlaying || pcmData.isEmpty()) return
+    fun play(pcmData: ByteArray, length: Int = pcmData.size) {
+        if (!isPlaying || length <= 0) return
 
         // Maintain real-time conversational latency (<120ms)
         while (audioQueue.size >= MAX_LATENCY_FRAMES) {
-            audioQueue.poll()
+            val dropped = audioQueue.poll()
+            if (dropped != null) bufferPool.offer(dropped)
         }
 
-        if (!audioQueue.offer(pcmData)) {
-            audioQueue.poll()
-            audioQueue.offer(pcmData)
+        val target = bufferPool.poll() ?: ByteArray(length)
+        val copyLen = length.coerceAtMost(target.size)
+        System.arraycopy(pcmData, 0, target, 0, copyLen)
+
+        if (!audioQueue.offer(target)) {
+            val dropped = audioQueue.poll()
+            if (dropped != null) bufferPool.offer(dropped)
+            audioQueue.offer(target)
         }
     }
 
@@ -194,7 +205,10 @@ class AudioPlayer {
         playbackThread?.interrupt()
         playbackThread?.join(500)
         playbackThread = null
-        audioQueue.clear()
+        while (audioQueue.isNotEmpty()) {
+            val dropped = audioQueue.poll()
+            if (dropped != null) bufferPool.offer(dropped)
+        }
         lastPlayedFrame = null
         plcWorkingBuffer = null
         plcConsecutiveCount = 0

@@ -44,6 +44,66 @@ class AudioMixer {
         streams[id] = targetShorts
     }
 
+    // Reusable scratchpad for collecting active streams without ArrayList allocations
+    private val activeEntries = ArrayList<ShortArray>(8)
+
+    /**
+     * In-place zero-allocation mix into [out] at [outOffset].
+     * @return number of bytes written to [out] (0 if no active streams).
+     */
+    fun mix(out: ByteArray, outOffset: Int = 0, excludeId: String? = null): Int {
+        activeEntries.clear()
+        val it = streams.entries.iterator()
+        while (it.hasNext()) {
+            val entry = it.next()
+            if (entry.key != excludeId) {
+                activeEntries.add(entry.value)
+                it.remove()
+            }
+        }
+
+        if (activeEntries.isEmpty()) return 0
+
+        // Single talker optimization
+        if (activeEntries.size == 1) {
+            val single = activeEntries[0]
+            val neededBytes = single.size * 2
+            val maxBytes = (out.size - outOffset).coerceAtMost(neededBytes)
+            val sampleCount = maxBytes / 2
+            for (i in 0 until sampleCount) {
+                val s = single[i].toInt()
+                out[outOffset + i * 2] = (s and 0xFF).toByte()
+                out[outOffset + i * 2 + 1] = ((s shr 8) and 0xFF).toByte()
+            }
+            return sampleCount * 2
+        }
+
+        // Multiple talkers: sum with saturation clipping
+        val outputLen = activeEntries.maxOf { it.size }
+        if (mixedShorts.size < outputLen) {
+            mixedShorts = ShortArray(outputLen)
+        }
+        mixedShorts.fill(0, 0, outputLen)
+
+        for (stream in activeEntries) {
+            for (i in stream.indices) {
+                val mixed = mixedShorts[i].toLong() + stream[i].toLong()
+                mixedShorts[i] = mixed.coerceIn(Short.MIN_VALUE.toLong(), Short.MAX_VALUE.toLong()).toShort()
+            }
+        }
+
+        val neededBytes = outputLen * 2
+        val maxBytes = (out.size - outOffset).coerceAtMost(neededBytes)
+        val sampleCount = maxBytes / 2
+        for (i in 0 until sampleCount) {
+            val s = mixedShorts[i].toInt()
+            out[outOffset + i * 2] = (s and 0xFF).toByte()
+            out[outOffset + i * 2 + 1] = ((s shr 8) and 0xFF).toByte()
+        }
+
+        return sampleCount * 2
+    }
+
     /**
      * Mix all submitted streams, optionally excluding [excludeId].
      * Used by the HOST to send back mixed audio (excluding the original sender).
@@ -51,7 +111,7 @@ class AudioMixer {
      * @return mixed PCM as ByteArray (little-endian 16-bit), or empty singleton if no streams.
      */
     fun mix(excludeId: String? = null): ByteArray {
-        val activeEntries = mutableListOf<ShortArray>()
+        activeEntries.clear()
         val it = streams.entries.iterator()
         while (it.hasNext()) {
             val entry = it.next()

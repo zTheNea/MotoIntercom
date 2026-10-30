@@ -86,6 +86,25 @@ object SessionCrypto {
     }
 
     /**
+     * In-place zero-allocation AES-CTR encryption writing IV + ciphertext into [out] at [outOffset].
+     * @return total bytes written into [out] (16 bytes IV + ciphertext length)
+     */
+    fun encrypt(
+        data: ByteArray,
+        offset: Int = 0,
+        length: Int = data.size,
+        out: ByteArray,
+        outOffset: Int = 0,
+        key: SecretKey
+    ): Int {
+        val cipher = cipherHolder.get() ?: Cipher.getInstance(ALGORITHM)
+        val iv = ByteArray(16).also { secureRandom.nextBytes(it) }
+        cipher.init(Cipher.ENCRYPT_MODE, key, IvParameterSpec(iv))
+        System.arraycopy(iv, 0, out, outOffset, 16)
+        return 16 + cipher.doFinal(data, offset, length, out, outOffset + 16)
+    }
+
+    /**
      * Decrypt [data] (IV + ciphertext) with [key] using AES-CTR.
      * Reads IV directly from the specified [offset] without intermediate array allocations.
      * @return original plaintext
@@ -111,6 +130,29 @@ object SessionCrypto {
 
         // Decrypt directly from the slice
         return cipher.doFinal(data, offset + 16, length - 16)
+    }
+
+    /**
+     * In-place zero-allocation AES-CTR decryption writing plaintext into [out] at [outOffset].
+     * @return total decrypted plaintext bytes written into [out]
+     */
+    fun decrypt(
+        data: ByteArray,
+        offset: Int = 0,
+        length: Int = data.size,
+        out: ByteArray,
+        outOffset: Int = 0,
+        key: SecretKey
+    ): Int {
+        if (length < 17) {
+            val passLen = length.coerceAtMost(out.size - outOffset)
+            System.arraycopy(data, offset, out, outOffset, passLen)
+            return passLen
+        }
+        val cipher = cipherHolder.get() ?: Cipher.getInstance(ALGORITHM)
+        val ivSpec = IvParameterSpec(data, offset, 16)
+        cipher.init(Cipher.DECRYPT_MODE, key, ivSpec)
+        return cipher.doFinal(data, offset + 16, length - 16, out, outOffset)
     }
 
     /**

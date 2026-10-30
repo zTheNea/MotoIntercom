@@ -43,6 +43,7 @@ import javax.crypto.SecretKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -87,6 +88,9 @@ class IntercomService : Service(), IntercomController {
     @Volatile private var lastVoiceActivityMs = 0L
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
+    private val mixedBuffer = ByteArray(AudioCapture.BYTES_PER_FRAME)
+    private val riderLastSpoke = ConcurrentHashMap<String, Long>()
+    private var riderDecayJob: Job? = null
 
     // ── Observables ──────────────────────────────────────────────────────
 
@@ -223,6 +227,23 @@ class IntercomService : Service(), IntercomController {
 
         acquireLocks()
 
+        riderDecayJob?.cancel()
+        riderDecayJob = serviceScope.launch {
+            while (isActive) {
+                delay(200)
+                val now = System.currentTimeMillis()
+                val current = _riders.value
+                val needsReset = current.any { it.isTalking && (now - (riderLastSpoke[it.id] ?: 0L)) > 400L }
+                if (needsReset) {
+                    _riders.value = current.map {
+                        if (it.isTalking && (now - (riderLastSpoke[it.id] ?: 0L)) > 400L) {
+                            it.copy(isTalking = false, signalLevel = 0f)
+                        } else it
+                    }
+                }
+            }
+        }
+
         val isHost = role == SessionRole.HOST
         // Host generates the master session token and AES-128 key.
         // Client connects with initial empty credentials and adopts the host's credentials via MSG_ROSTER.
@@ -240,9 +261,9 @@ class IntercomService : Service(), IntercomController {
             onAudioReceived = { senderId, pcm, amp ->
                 if (amp > 0.03f) notifyVoiceActivity()
                 mixer.submitFrame(senderId, pcm)
-                val mixed = mixer.mix()
-                if (mixed.isNotEmpty()) {
-                    player.play(mixed)
+                val bytesMixed = mixer.mix(mixedBuffer)
+                if (bytesMixed > 0) {
+                    player.play(mixedBuffer, bytesMixed)
                 }
                 updateRiderTalking(senderId, amp)
             }
@@ -374,28 +395,19 @@ class IntercomService : Service(), IntercomController {
         capture.start()
     }
 
-    private val riderResetJobs = ConcurrentHashMap<String, Job>()
-
     private fun updateRiderTalking(senderId: String, amp: Float) {
         val isTalking = amp > 0.04f
+        if (isTalking) {
+            riderLastSpoke[senderId] = System.currentTimeMillis()
+        }
         val current = _riders.value
         val rider = current.find { it.id == senderId } ?: return
 
-        if (rider.isTalking != isTalking || (isTalking && Math.abs(rider.signalLevel - amp) > 0.08f)) {
+        // Throttle rapid amplitude noise: only emit on state change or significant amplitude difference (>0.12f)
+        if (rider.isTalking != isTalking || (isTalking && Math.abs(rider.signalLevel - amp) > 0.12f)) {
             _riders.value = current.map {
                 if (it.id == senderId) it.copy(isTalking = isTalking, signalLevel = amp)
                 else it
-            }
-        }
-
-        riderResetJobs[senderId]?.cancel()
-        if (isTalking) {
-            riderResetJobs[senderId] = serviceScope.launch {
-                delay(400)
-                _riders.value = _riders.value.map {
-                    if (it.id == senderId) it.copy(isTalking = false, signalLevel = 0f)
-                    else it
-                }
             }
         }
     }
@@ -408,8 +420,9 @@ class IntercomService : Service(), IntercomController {
     override fun stopIntercom() {
         Log.d(TAG, "stopIntercom called")
         _sessionTerminated.value = true
-        riderResetJobs.values.forEach { it.cancel() }
-        riderResetJobs.clear()
+        riderDecayJob?.cancel()
+        riderDecayJob = null
+        riderLastSpoke.clear()
         isVoiceDuckingActive = false
         voiceDuckJob?.cancel()
         voiceDuckJob = null

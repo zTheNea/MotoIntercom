@@ -1,0 +1,5 @@
+appId: com.motointercom
+flows:
+  - 01_home_screen_flow.yaml
+  - 02_create_session_and_ptt_flow.yaml
+  - 03_driving_modes_flow.yaml

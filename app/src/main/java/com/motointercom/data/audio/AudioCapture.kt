@@ -62,6 +62,11 @@ class AudioCapture(private val scope: CoroutineScope) {
     var voxEnabled = false
     private var voxHoldCounter = 0
 
+    // Reusable frame buffer pool to avoid garbage collection churn during 50 FPS audio capture
+    private val framePool = java.util.concurrent.ArrayBlockingQueue<ByteArray>(8).apply {
+        repeat(8) { offer(ByteArray(BYTES_PER_FRAME)) }
+    }
+
     @SuppressLint("MissingPermission")
     fun start() {
         if (isCapturing) return
@@ -112,7 +117,6 @@ class AudioCapture(private val scope: CoroutineScope) {
 
             captureJob = scope.launch(Dispatchers.IO) {
                 val buffer = ShortArray(SAMPLES_PER_FRAME)
-                val byteBuffer = ByteArray(BYTES_PER_FRAME)
 
                 while (isActive && isCapturing) {
                     val samplesRead = audioRecord?.read(buffer, 0, buffer.size) ?: break
@@ -149,13 +153,17 @@ class AudioCapture(private val scope: CoroutineScope) {
                     } else true
 
                     if (shouldTransmit) {
-                        // Convert ShortArray to ByteArray (little-endian)
+                        val frame = framePool.poll() ?: ByteArray(BYTES_PER_FRAME)
                         for (i in 0 until samplesRead) {
                             val s = buffer[i].toInt()
-                            byteBuffer[i * 2] = (s and 0xFF).toByte()
-                            byteBuffer[i * 2 + 1] = ((s shr 8) and 0xFF).toByte()
+                            frame[i * 2] = (s and 0xFF).toByte()
+                            frame[i * 2 + 1] = ((s shr 8) and 0xFF).toByte()
                         }
-                        onAudioCaptured?.invoke(byteBuffer.copyOf(samplesRead * 2))
+                        try {
+                            onAudioCaptured?.invoke(frame)
+                        } finally {
+                            framePool.offer(frame)
+                        }
                     }
                 }
             }

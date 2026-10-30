@@ -31,14 +31,20 @@ fun NavGraph(navController: NavHostController) {
             val error by homeVm.errorMessage.collectAsState()
             val discoveredSessions by homeVm.discoveredSessions.collectAsState()
             val updateInfo by homeVm.updateInfo.collectAsState()
+            val downloadProgress by homeVm.downloadProgress.collectAsState()
 
             HomeScreen(
                 session = session,
                 errorMessage = error,
                 discoveredSessions = discoveredSessions,
                 updateInfo = updateInfo,
+                downloadProgress = downloadProgress,
                 initialRiderName = homeVm.savedRiderName,
                 onDismissUpdate = { homeVm.dismissUpdate() },
+                onStartDownload = { url, version -> homeVm.startApkDownload(url, version) },
+                onCancelDownload = { homeVm.cancelApkDownload() },
+                onInstallApk = { homeVm.installDownloadedApk() },
+                onCheckInstallPermission = { homeVm.checkInstallPermissionOnResume() },
                 onCreateSession = { name -> homeVm.createSession(name) },
                 onJoinSession = { name, ip -> homeVm.joinSession(name, ip) },
                 onClearError = { homeVm.clearError() },

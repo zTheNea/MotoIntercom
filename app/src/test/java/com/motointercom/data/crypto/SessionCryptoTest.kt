@@ -110,4 +110,34 @@ class SessionCryptoTest {
 
         assertFalse("MAC verification with different key must fail", isValid)
     }
+
+    @Test
+    fun `in-place encrypt and decrypt roundtrip matches original data`() {
+        val key = SessionCrypto.generateSessionKey()
+        val originalData = "Zero-Allocation Audio In-Place Encryption".toByteArray(Charsets.UTF_8)
+
+        val encryptedBuffer = ByteArray(16 + originalData.size + 16)
+        val encryptedLen = SessionCrypto.encrypt(
+            data = originalData,
+            offset = 0,
+            length = originalData.size,
+            out = encryptedBuffer,
+            outOffset = 0,
+            key = key
+        )
+        assertEquals(16 + originalData.size, encryptedLen)
+
+        val decryptedBuffer = ByteArray(originalData.size)
+        val decryptedLen = SessionCrypto.decrypt(
+            data = encryptedBuffer,
+            offset = 0,
+            length = encryptedLen,
+            out = decryptedBuffer,
+            outOffset = 0,
+            key = key
+        )
+
+        assertEquals(originalData.size, decryptedLen)
+        assertArrayEquals(originalData, decryptedBuffer)
+    }
 }
