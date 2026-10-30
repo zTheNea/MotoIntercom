@@ -216,7 +216,7 @@ fun UpdateAvailableDialog(
                             onStartDownload(url, updateInfo.latestVersion)
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = OrangeFlame),
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(12.dp)
                     ) {
                         Text("DESCARGAR E INSTALAR", fontWeight = FontWeight.Bold, color = Color.Black)
                     }
@@ -230,7 +230,7 @@ fun UpdateAvailableDialog(
                     Button(
                         onClick = onInstallApk,
                         colors = ButtonDefaults.buttonColors(containerColor = GreenActive),
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(12.dp)
                     ) {
                         val btnText = if (downloadProgress.needsInstallPermission) {
                             "AUTORIZAR E INSTALAR"
@@ -248,7 +248,7 @@ fun UpdateAvailableDialog(
                             onStartDownload(url, updateInfo.latestVersion)
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = OrangeFlame),
-                        shape = RoundedCornerShape(8.dp)
+                        shape = RoundedCornerShape(12.dp)
                     ) {
                         Text("REINTENTAR", fontWeight = FontWeight.Bold, color = Color.Black)
                     }

@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.motointercom.data.wifi.DiscoveredSession
@@ -34,18 +35,33 @@ fun JoinSessionContent(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(16.dp))
             .background(BackgroundCard)
-            .border(1.dp, DividerColor, RoundedCornerShape(20.dp))
-            .padding(24.dp),
+            .border(1.dp, DividerColor, RoundedCornerShape(16.dp))
+            .padding(18.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Icon(Icons.Default.WifiFind, null, tint = AmberGlow, modifier = Modifier.size(40.dp))
+        Box(
+            modifier = Modifier
+                .size(52.dp)
+                .background(AmberGlow.copy(alpha = 0.15f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Default.WifiFind, null, tint = AmberGlow, modifier = Modifier.size(26.dp))
+        }
+
         Text(
             "Unirse a un Grupo",
-            style = MaterialTheme.typography.titleLarge,
-            color = TextPrimary
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+            color = TextPrimary,
+            textAlign = TextAlign.Center
+        )
+        Text(
+            "Conéctate automáticamente a una sesión activa en tu misma red WiFi o Hotspot.",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextSecondary,
+            textAlign = TextAlign.Center
         )
 
         // ── Auto-Discovered Sessions ─────────────────────────────────────
@@ -83,21 +99,23 @@ fun JoinSessionContent(
                 )
             }
         } else {
-            // Radar pulse search banner
+            // Radar pulse search banner (symmetrically centered)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
+                    .clip(RoundedCornerShape(12.dp))
                     .background(BackgroundElevated)
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .border(1.dp, DividerColor.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 14.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
             ) {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
+                    modifier = Modifier.size(18.dp),
                     color = AmberGlow,
                     strokeWidth = 2.dp
                 )
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(12.dp))
                 Text(
                     "Escaneando sesiones activas en tu red WiFi...",
                     style = MaterialTheme.typography.bodySmall,
@@ -119,9 +137,9 @@ fun DiscoveredSessionCard(
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .background(BackgroundElevated)
-            .border(1.dp, GreenActive.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+            .border(1.dp, GreenActive.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
             .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -129,8 +147,15 @@ fun DiscoveredSessionCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.TwoWheeler, null, tint = GreenActive, modifier = Modifier.size(24.dp))
-                Spacer(Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(GreenActive.copy(alpha = 0.15f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.TwoWheeler, null, tint = GreenActive, modifier = Modifier.size(20.dp))
+                }
+                Spacer(Modifier.width(10.dp))
                 Column {
                     Text(
                         discovered.hostName,
@@ -148,7 +173,7 @@ fun DiscoveredSessionCard(
             }
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
+                    .clip(RoundedCornerShape(8.dp))
                     .background(GreenDim)
                     .padding(horizontal = 8.dp, vertical = 4.dp)
             ) {
@@ -165,8 +190,8 @@ fun DiscoveredSessionCard(
             onClick = onJoin,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(44.dp),
-            shape = RoundedCornerShape(10.dp),
+                .height(50.dp),
+            shape = RoundedCornerShape(14.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
             contentPadding = PaddingValues(0.dp)
         ) {
@@ -175,12 +200,15 @@ fun DiscoveredSessionCard(
                     .fillMaxSize()
                     .background(
                         Brush.horizontalGradient(listOf(GreenActive, Color(0xFF00B0FF))),
-                        RoundedCornerShape(10.dp)
+                        RoundedCornerShape(14.dp)
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.AutoMirrored.Filled.Login, null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.Login, null, tint = Color.Black, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(8.dp))
                     Text(
                         "UNIRSE CON 1 TOQUE",

@@ -92,14 +92,14 @@ fun RiderCard(
     ) {
         // ── Avatar with Discord Glowing Ring (graphicsLayer optimized) ─────────
         Box(
-            modifier = Modifier.size(50.dp),
+            modifier = Modifier.size(48.dp),
             contentAlignment = Alignment.Center
         ) {
             // Discord outer glowing aura when speaking (draw-phase transformation)
             if (isTalking) {
                 Box(
                     modifier = Modifier
-                        .size(46.dp)
+                        .size(48.dp)
                         .graphicsLayer {
                             scaleX = haloPulse
                             scaleY = haloPulse
@@ -162,50 +162,58 @@ fun RiderCard(
             overflow = TextOverflow.Ellipsis
         )
 
-        // ── Discord Voice Status Badge ──────────────────────────────────
-        if (isTalking) {
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(if (isSunMode) Color(0xFF2E7D32) else DiscordGreen)
-                    .padding(horizontal = 4.dp, vertical = 2.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                Icon(
-                    Icons.Default.Mic,
-                    null,
-                    tint = Color.White,
-                    modifier = Modifier.size(9.dp)
-                )
+        // ── Voice Status Badge (Fixed 20dp Height for Symmetrical Row Alignment) ──
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(20.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            if (isTalking) {
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (isSunMode) Color(0xFF2E7D32) else DiscordGreen)
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Mic,
+                        null,
+                        tint = Color.White,
+                        modifier = Modifier.size(10.dp)
+                    )
+                    Text(
+                        "VOZ",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White
+                    )
+                }
+            } else {
+                val statusLabel = when {
+                    !isConnected -> "• fuera"
+                    isLocal -> "• listo"
+                    else -> "• ${linkQuality.label}"
+                }
+                val statusColor = when {
+                    !isConnected -> TextMuted
+                    isLocal || linkQuality == LinkQuality.OPTIMA -> if (isSunMode) Color(0xFF1B5E20) else GreenActive.copy(alpha = 0.7f)
+                    linkQuality == LinkQuality.BUENA -> if (isSunMode) Color(0xFF1565C0) else BlueInfo.copy(alpha = 0.7f)
+                    linkQuality == LinkQuality.INESTABLE -> if (isSunMode) Color(0xFFE65100) else OrangeFlame.copy(alpha = 0.7f)
+                    else -> if (isSunMode) Color(0xFFB71C1C) else RedDanger.copy(alpha = 0.7f)
+                }
                 Text(
-                    "VOZ",
+                    statusLabel,
                     style = MaterialTheme.typography.labelSmall,
-                    fontSize = 7.5.sp,
-                    fontWeight = FontWeight.Black,
-                    color = Color.White
+                    fontSize = 9.5.sp,
+                    fontWeight = if (isSunMode) FontWeight.Bold else FontWeight.Normal,
+                    color = statusColor,
+                    maxLines = 1
                 )
             }
-        } else {
-            val statusLabel = when {
-                !isConnected -> "• fuera"
-                isLocal -> "• listo"
-                else -> "• ${linkQuality.label}"
-            }
-            val statusColor = when {
-                !isConnected -> TextMuted
-                isLocal || linkQuality == LinkQuality.OPTIMA -> if (isSunMode) Color(0xFF1B5E20) else GreenActive.copy(alpha = 0.7f)
-                linkQuality == LinkQuality.BUENA -> if (isSunMode) Color(0xFF1565C0) else BlueInfo.copy(alpha = 0.7f)
-                linkQuality == LinkQuality.INESTABLE -> if (isSunMode) Color(0xFFE65100) else OrangeFlame.copy(alpha = 0.7f)
-                else -> if (isSunMode) Color(0xFFB71C1C) else RedDanger.copy(alpha = 0.7f)
-            }
-            Text(
-                statusLabel,
-                style = MaterialTheme.typography.labelSmall,
-                fontSize = 9.5.sp,
-                fontWeight = if (isSunMode) FontWeight.Bold else FontWeight.Normal,
-                color = statusColor
-            )
         }
     }
 }
@@ -229,27 +237,41 @@ fun EmptyRiderSlot(
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Box(
-            modifier = Modifier
-                .size(40.dp)
-                .background(BackgroundElevated, CircleShape)
-                .border(1.dp, sunBorder, CircleShape),
+            modifier = Modifier.size(48.dp),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Default.PersonAdd, null, tint = sunTextSec, modifier = Modifier.size(18.dp))
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(BackgroundElevated, CircleShape)
+                    .border(1.dp, sunBorder, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.PersonAdd, null, tint = sunTextSec, modifier = Modifier.size(18.dp))
+            }
         }
         Text(
             "Libre",
             style = MaterialTheme.typography.labelSmall,
             fontSize = 11.sp,
             color = sunTextSec,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
+            maxLines = 1
         )
-        Text(
-            "• espera",
-            style = MaterialTheme.typography.labelSmall,
-            fontSize = 9.5.sp,
-            color = sunTextSec.copy(alpha = 0.6f),
-            textAlign = TextAlign.Center
-        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(20.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                "• espera",
+                style = MaterialTheme.typography.labelSmall,
+                fontSize = 9.5.sp,
+                color = sunTextSec.copy(alpha = 0.6f),
+                textAlign = TextAlign.Center,
+                maxLines = 1
+            )
+        }
     }
 }

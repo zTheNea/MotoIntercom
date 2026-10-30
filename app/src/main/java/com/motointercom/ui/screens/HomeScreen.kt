@@ -94,16 +94,16 @@ fun HomeScreen(
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(12.dp))
 
             // ── Logo & Brand ────────────────────────────────────────────
             MotoLogo()
 
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(8.dp))
 
             Text(
                 stringResource(R.string.app_tagline).uppercase(),
@@ -112,12 +112,12 @@ fun HomeScreen(
                 letterSpacing = 2.sp
             )
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(20.dp))
 
             // ── Tab Selector ────────────────────────────────────────────
             TabSelector(activeTab) { activeTab = it }
 
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(16.dp))
 
             // ── Name Field (shared) ─────────────────────────────────────
             MotoTextField(
@@ -128,7 +128,7 @@ fun HomeScreen(
                 placeholder = stringResource(R.string.rider_name_placeholder)
             )
 
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(16.dp))
 
             // ── Tab Content ─────────────────────────────────────────────
             AnimatedContent(

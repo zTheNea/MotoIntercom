@@ -159,7 +159,7 @@ fun RainLockOverlay(
             ) {
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth(0.92f)
+                        .fillMaxWidth()
                         .height(56.dp)
                         .clip(RoundedCornerShape(16.dp))
                         .background(Color(0xFF1E2235))

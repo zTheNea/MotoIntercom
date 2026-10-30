@@ -46,7 +46,7 @@ fun RiderGrid(
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // Local rider (self)
             Box(modifier = Modifier.weight(1f)) {

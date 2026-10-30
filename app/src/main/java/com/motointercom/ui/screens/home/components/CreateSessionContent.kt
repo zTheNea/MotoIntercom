@@ -29,18 +29,27 @@ fun CreateSessionContent(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(16.dp))
             .background(BackgroundCard)
-            .border(1.dp, DividerColor, RoundedCornerShape(18.dp))
+            .border(1.dp, DividerColor, RoundedCornerShape(16.dp))
             .padding(18.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Icon(Icons.Default.Router, null, tint = OrangeFlame, modifier = Modifier.size(32.dp))
+        Box(
+            modifier = Modifier
+                .size(52.dp)
+                .background(OrangeFlame.copy(alpha = 0.15f), androidx.compose.foundation.shape.CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Default.Router, null, tint = OrangeFlame, modifier = Modifier.size(26.dp))
+        }
+
         Text(
             "Crear Punto de Acceso",
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-            color = TextPrimary
+            color = TextPrimary,
+            textAlign = TextAlign.Center
         )
         Text(
             "Tu teléfono creará una red WiFi local para el grupo, sin necesidad de conexión a internet ni datos móviles.",
@@ -62,36 +71,38 @@ fun CreateSessionContent(
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(10.dp))
                         .background(BackgroundElevated)
-                        .padding(vertical = 8.dp, horizontal = 4.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                        .border(1.dp, DividerColor.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                        .padding(vertical = 10.dp, horizontal = 4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Text(
                         title,
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                         color = TextPrimary,
-                        maxLines = 1
+                        maxLines = 1,
+                        textAlign = TextAlign.Center
                     )
                     Text(
                         subtitle,
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                         color = TextSecondary,
-                        maxLines = 1
+                        maxLines = 1,
+                        textAlign = TextAlign.Center
                     )
                 }
             }
         }
-
-        Spacer(Modifier.height(2.dp))
 
         Button(
             onClick = onCreateSession,
             enabled = !isLoading,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(52.dp),
-            shape = RoundedCornerShape(12.dp),
+                .height(50.dp),
+            shape = RoundedCornerShape(14.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
             contentPadding = PaddingValues(0.dp)
         ) {
@@ -100,15 +111,18 @@ fun CreateSessionContent(
                     .fillMaxSize()
                     .background(
                         Brush.horizontalGradient(listOf(OrangeFlame, AmberGlow)),
-                        RoundedCornerShape(12.dp)
+                        RoundedCornerShape(14.dp)
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 if (isLoading) {
                     CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
                 } else {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.WifiTethering, null, tint = Color.White)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(Icons.Default.WifiTethering, null, tint = Color.White, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.width(10.dp))
                         Text(
                             "CREAR GRUPO",

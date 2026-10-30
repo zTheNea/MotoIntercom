@@ -48,11 +48,12 @@ fun ControlBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(18.dp))
             .background(sunCard)
-            .border(sunBorderWidth, sunBorder, RoundedCornerShape(16.dp))
-            .padding(vertical = 4.dp, horizontal = 2.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly
+            .border(sunBorderWidth, sunBorder, RoundedCornerShape(18.dp))
+            .padding(vertical = 8.dp, horizontal = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
         ControlButton(
             icon = if (isMuted) Icons.Default.MicOff else Icons.Default.Mic,
@@ -60,7 +61,8 @@ fun ControlBar(
             isActive = !isMuted,
             activeColor = if (isSunMode) Color(0xFF1B5E20) else GreenActive,
             onClick = onMuteToggle,
-            isSunMode = isSunMode
+            isSunMode = isSunMode,
+            modifier = Modifier.weight(1f)
         )
         ControlButton(
             icon = Icons.Default.GraphicEq,
@@ -68,7 +70,8 @@ fun ControlBar(
             isActive = isVox,
             activeColor = if (isSunMode) Color(0xFFE65100) else AmberGlow,
             onClick = onVoxToggle,
-            isSunMode = isSunMode
+            isSunMode = isSunMode,
+            modifier = Modifier.weight(1f)
         )
         ControlButton(
             icon = if (isSpeaker) Icons.AutoMirrored.Filled.VolumeUp else Icons.Default.Headset,
@@ -76,7 +79,8 @@ fun ControlBar(
             isActive = true,
             activeColor = if (isSpeaker) (if (isSunMode) Color(0xFFE65100) else AmberGlow) else (if (isSunMode) Color(0xFF1B5E20) else GreenActive),
             onClick = onSpeakerToggle,
-            isSunMode = isSunMode
+            isSunMode = isSunMode,
+            modifier = Modifier.weight(1f)
         )
         ControlButton(
             icon = if (isMusicActive) Icons.Default.MusicNote else Icons.Default.MusicOff,
@@ -84,7 +88,8 @@ fun ControlBar(
             isActive = isMusicActive,
             activeColor = if (isSunMode) Color(0xFF6A1B9A) else PurpleAccent,
             onClick = onMusicClick,
-            isSunMode = isSunMode
+            isSunMode = isSunMode,
+            modifier = Modifier.weight(1f)
         )
     }
 }
@@ -103,13 +108,13 @@ fun ControlButton(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
             .clickable { onClick() }
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Box(
             modifier = Modifier
-                .size(42.dp)
+                .size(48.dp)
                 .background(
                     if (isActive) activeColor.copy(alpha = if (isSunMode) 0.22f else 0.15f) else (if (isSunMode) Color(0xFFE5E7EB) else BackgroundElevated),
                     CircleShape
@@ -124,7 +129,7 @@ fun ControlButton(
             Icon(
                 icon, null,
                 tint = if (isActive) activeColor else (if (isSunMode) Color(0xFF4B5563) else TextSecondary),
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(22.dp)
             )
         }
         Text(
@@ -132,7 +137,8 @@ fun ControlButton(
             style = MaterialTheme.typography.labelSmall,
             fontWeight = if (isSunMode) FontWeight.Bold else FontWeight.Normal,
             color = if (isActive) activeColor else (if (isSunMode) Color(0xFF374151) else TextSecondary),
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
+            maxLines = 1
         )
     }
 }

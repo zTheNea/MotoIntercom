@@ -86,7 +86,7 @@ fun MotoLogo(modifier: Modifier = Modifier) {
                     fontWeight = FontWeight.ExtraBold,
                     brush = Brush.horizontalGradient(listOf(OrangeFlame, AmberGlow))
                 ),
-                letterSpacing = 2.sp
+                letterSpacing = 3.sp
             )
             Text(
                 "INTERCOM",
@@ -94,7 +94,7 @@ fun MotoLogo(modifier: Modifier = Modifier) {
                     fontWeight = FontWeight.Bold
                 ),
                 color = TextPrimary,
-                letterSpacing = 4.sp
+                letterSpacing = 3.sp
             )
         }
     }
@@ -109,8 +109,9 @@ fun TabSelector(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(16.dp))
             .background(BackgroundCard)
+            .border(1.dp, DividerColor, RoundedCornerShape(16.dp))
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
@@ -119,7 +120,7 @@ fun TabSelector(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .clip(RoundedCornerShape(10.dp))
+                    .clip(RoundedCornerShape(12.dp))
                     .background(
                         if (isSelected)
                             Brush.horizontalGradient(listOf(OrangeFlame, OrangeHot))
@@ -158,7 +159,7 @@ fun MotoTextField(
         placeholder = { Text(placeholder, color = TextMuted) },
         leadingIcon = { Icon(icon, null, tint = OrangeFlame) },
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = OutlinedTextFieldDefaults.colors(
             focusedTextColor = TextPrimary,
             unfocusedTextColor = TextPrimary,
@@ -178,14 +179,14 @@ fun InfoCard(modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(16.dp))
             .background(BackgroundCard)
-            .border(1.dp, OrangeGlass, RoundedCornerShape(12.dp))
+            .border(1.dp, DividerColor, RoundedCornerShape(16.dp))
             .padding(16.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(Icons.Default.Bluetooth, null, tint = AmberGlow, modifier = Modifier.size(28.dp))
+        Icon(Icons.Default.Bluetooth, null, tint = AmberGlow, modifier = Modifier.size(26.dp))
         Text(
             "Conecta tu casco Bluetooth antes de iniciar para que el audio se enrute automáticamente.",
             style = MaterialTheme.typography.bodyMedium,

@@ -51,7 +51,7 @@ fun SessionHeader(
             .clip(RoundedCornerShape(16.dp))
             .background(containerColor)
             .border(borderWidth, borderColor, RoundedCornerShape(16.dp))
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
@@ -74,7 +74,7 @@ fun SessionHeader(
                     .size(10.dp)
                     .background(dotColor.copy(alpha = dotAlpha), CircleShape)
             )
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(12.dp))
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     val statusText = when {
@@ -125,13 +125,13 @@ fun SessionHeader(
         // Action Buttons Row: Sun Mode, Rain Lock, End Session
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // Outdoor Sun Mode Toggle (High Contrast)
             IconButton(
                 onClick = onToggleSunMode,
                 modifier = Modifier
-                    .size(38.dp)
+                    .size(40.dp)
                     .clip(CircleShape)
                     .background(if (isSunMode) Color(0xFFFFD54F) else BackgroundElevated)
                     .border(1.dp, if (isSunMode) Color(0xFFFFA000) else borderColor, CircleShape)
@@ -140,7 +140,7 @@ fun SessionHeader(
                     Icons.Default.WbSunny,
                     contentDescription = "Modo Sol",
                     tint = if (isSunMode) Color(0xFFBF360C) else TextSecondary,
-                    modifier = Modifier.size(19.dp)
+                    modifier = Modifier.size(20.dp)
                 )
             }
 
@@ -148,7 +148,7 @@ fun SessionHeader(
             IconButton(
                 onClick = onToggleRainLock,
                 modifier = Modifier
-                    .size(38.dp)
+                    .size(40.dp)
                     .clip(CircleShape)
                     .background(BackgroundElevated)
                     .border(1.dp, borderColor, CircleShape)
@@ -157,7 +157,7 @@ fun SessionHeader(
                     Icons.Default.WaterDrop,
                     contentDescription = "Modo Lluvia",
                     tint = CyanAccent,
-                    modifier = Modifier.size(19.dp)
+                    modifier = Modifier.size(20.dp)
                 )
             }
 
@@ -165,11 +165,12 @@ fun SessionHeader(
             IconButton(
                 onClick = onEnd,
                 modifier = Modifier
-                    .size(38.dp)
+                    .size(40.dp)
                     .clip(CircleShape)
                     .background(RedDim)
+                    .border(1.dp, RedDanger.copy(alpha = 0.4f), CircleShape)
             ) {
-                Icon(Icons.Default.CallEnd, "Terminar", tint = RedDanger, modifier = Modifier.size(19.dp))
+                Icon(Icons.Default.CallEnd, "Terminar", tint = RedDanger, modifier = Modifier.size(20.dp))
             }
         }
     }
